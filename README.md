@@ -1,926 +1,568 @@
 # XAsset Command Center
 
-Aplikasi web untuk memantau aset perusahaan pada peta 3D (CesiumJS) yang digabungkan dengan denah/gambar teknik berformat DXF. Sistem mendukung pengelolaan aset, editor DXF berbasis web, penjadwalan maintenance, pengunggahan dokumen, audit log, dan kontrol akses berbasis peran (RBAC).
+XAsset adalah aplikasi manajemen aset berbasis peta untuk bandara dan site operasional. Aplikasi menggabungkan data aset, posisi titik atau polygon, foto dan dokumen, serta gambar teknik DXF dalam satu dashboard geospasial.
 
-> **Targetkan:** Bandar Udara Raja Haji Fisabilillah — Tanjung Pinang (site `TNJ`), dengan ekstensi ke lokasi lain.
+Repository: [github.com/exwox/xasset](https://github.com/exwox/xasset)
 
----
+## Fitur saat ini
 
-## 📑 Daftar Isi
+| Area             | Fitur                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboard peta   | Peta Cesium 2D/3D, fallback Leaflet, basemap MAP/SAT, pencarian, filter status, filter class asset, dan filter posisi                    |
+| Posisi aset      | Menentukan, mengubah, dan menghapus posisi titik langsung dari peta                                                                      |
+| Polygon aset     | Menggambar polygon minimal 3 titik, undo titik, menyimpan pusat polygon, mengubah, dan menghapus polygon                                 |
+| Detail aset      | Panel detail di dashboard, foto utama, status lifecycle, nilai aset, lokasi, dokumentasi, dan tombol Edit Asset berbentuk popup          |
+| Data aset        | CRUD, soft archive, optimistic locking, pencarian, sorting, pagination, pilihan kolom, dan hapus semua khusus Admin                      |
+| Import/Export    | Hanya XLSX; preview sebelum import, template lengkap, foto tertanam otomatis, dan export data beserta foto                               |
+| DXF              | Upload dan versioning di halaman DXF, background processing, georeference, kontrol layer, editor web, publish, archive, dan overlay peta |
+| Kontrol DXF peta | Pemilihan dokumen DXF serta tombol DXF ON/OFF agar overlay dapat dimatikan saat tidak dibutuhkan                                         |
+| Dokumen aset     | Foto, PDF, TXT, CSV, XLSX, dan DOCX; signed URL, validasi signature, kategori, download, dan soft archive                                |
+| Admin panel      | Active site/lokasi awal peta, tambah site bandara, serta manajemen user dan role                                                         |
+| Akses pengguna   | Tiga role: Admin, User, dan Viewer                                                                                                       |
+| Tampilan         | Logout di header, footer global, layout responsif, popup di atas layer peta, dan Print/PDF peta penuh                                    |
+| Operasional      | Audit log, health check, metrics Admin, backup/restore database, dan worker DXF                                                          |
 
-1. [Ringkasan Fitur](#-ringkasan-fitur)
-2. [Persyaratan Sistem](#-persyaratan-sistem)
-3. [Quick Start (Pengembangan Lokal)](#-quick-start-pengembangan-lokal)
-4. [Konfigurasi Lingkungan](#-konfigurasi-lingkungan)
-5. [Menjalankan Aplikasi](#-menjalankan-aplikasi)
-6. [Deployment Produksi](#-deployment-produksi)
-7. [Skrip yang Tersedia](#-skrip-yang-tersedia)
-8. [Panduan Operasional](#-panduan-operasional)
-9. [Referensi API](#-referensi-api)
-10. [Peran & Izin](#-peran--izin)
-11. [Troubleshooting](#-troubleshooting)
-12. [Dokumentasi Tambahan](#-dokumentasi-tambahan)
+## Perubahan penting dari versi lama
 
----
+- Modul **Maintenance** dan seluruh tabel/permission maintenance sudah dihapus.
+- Status **Under Maintenance** tetap tersedia sebagai status lifecycle aset, bukan sebagai modul jadwal maintenance.
+- Field **Kebutuhan Data** sudah dihapus dari form, API, import/export, dan database.
+- Role lama Operator dan DXF Editor digabung menjadi role **User**.
+- Filter dashboard menggunakan **Class Asset**, bukan frekuensi pemakaian.
+- Upload dan pengelolaan DXF hanya tersedia di halaman **DXF**; dashboard hanya menampilkan overlay.
+- Import/export dataset hanya mendukung **XLSX**, bukan CSV.
 
-## 🧩 Ringkasan Fitur
+## Status lifecycle aset
 
-| Area | Fitur |
-|---|---|
-| **Peta 3D** | Visualisasi aset pada peta globe 2D/3D CesiumJS, clustering marker, fly-to, overlay DXF, kontrol layer/opacity, pemilihan basemap (street/aerial) |
-| **Manajemen Aset** | CRUD aset (soft-archive), pencarian, filter, sorting, pagination, ekspor XLSX, optimistic locking (version-based) |
-| **DXF Management** | Upload, validasi signature, parsing background worker, preview, kalibrasi (≥2 control point), versi draft/published/archived, publish/rollback |
-| **Web DXF Editor** | Editor 2D canvas untuk LINE, POLYLINE, CIRCLE, ARC, TEXT — move, rotate, scale, copy, delete, snap, undo/redo, multi-select |
-| **Maintenance** | Jenis (preventive/corrective/inspection), jadwal, Mulai/Selesai, recurrence, actual cost, reminder, laporan |
-| **Dokumen Aset** | Upload PDF/gambar/docx dengan validasi file signature, signed URL, kategori, archive (soft-delete) |
-| **Audit Log** | Pencatatan penuh untuk login, perubahan aset, posisi, DXF, master data, dokumen, maintenance |
-| **Keamanan** | RBAC 4 level, CSRF protection, rate limiting login, file signature validation, security headers |
-| **Monitoring** | Health check (`/api/health`), Prometheus metrics (`/api/metrics`, hanya admin) |
-| **Import/Export** | XLSX bulk import dengan foto tertanam, preview & reconciliation |
+Status yang tersedia:
 
----
+- Planned
+- Under Construction
+- Commissioning
+- Active
+- Under Maintenance
+- Inactive
+- Decommissioned
+- Demolished
 
-## 🔧 Persyaratan Sistem
+Setiap status mempunyai warna marker dan polygon tersendiri pada dashboard.
 
-- **Docker & Docker Compose** — wajib untuk PostgreSQL (PostGIS), Redis, dan MinIO
-- **Node.js 24+** — untuk pengembangan lokal dan worker
-- **npm** — package manager
-- **curl** — untuk health check smoke test
+## Role dan hak akses
 
-> **Spesifikasi minimum DXF:** parser browser dibatasi pada file kecil (~10 MB). DXF produksi yang besar diproses oleh **background worker** otomatis.
+| Role   | Akses                                                                                                       |
+| ------ | ----------------------------------------------------------------------------------------------------------- |
+| Admin  | Akses penuh, dashboard, dataset, DXF, dokumen, publish DXF, Admin Panel, metrics, dan arsip semua aset      |
+| User   | Melihat dan mengedit dataset, posisi/polygon, foto/dokumen, upload/edit/publish DXF, import dan export XLSX |
+| Viewer | Hanya melihat dashboard, aset, dan overlay DXF yang tersedia                                                |
 
----
+Perubahan role atau status aktif user langsung berlaku karena session selalu diverifikasi kembali ke database. Admin aktif terakhir tidak dapat diturunkan role-nya atau dinonaktifkan.
 
-## 🚀 Quick Start (Pengembangan Lokal)
+## Halaman aplikasi
 
-### ⭐ Cara Tercepat (1 Command)
+| URL              | Fungsi                                                      | Akses               |
+| ---------------- | ----------------------------------------------------------- | ------------------- |
+| `/`              | Dashboard peta dan detail aset                              | Admin, User, Viewer |
+| `/assets`        | Tabel dataset, import/export, tambah/edit aset              | Admin, User         |
+| `/assets/{id}`   | Detail, foto, dokumen, histori, posisi dan polygon          | Admin, User         |
+| `/dxf`           | Upload, versi, georeference, layer, publish dan archive DXF | Admin, User         |
+| `/dxf/{id}/edit` | Editor DXF berbasis canvas                                  | Admin, User         |
+| `/admin`         | Active site dan user role management                        | Admin               |
+| `/login`         | Login                                                       | Publik              |
+
+## Persyaratan
+
+- Linux, macOS, atau Windows dengan WSL2
+- Node.js 24+
+- npm
+- Docker dan Docker Compose
+- PostgreSQL dengan PostGIS
+- Redis
+- MinIO atau object storage kompatibel S3
+
+Untuk penggunaan produksi, PostgreSQL, Redis, MinIO, metrics, dan endpoint administrasi sebaiknya hanya tersedia melalui jaringan privat.
+
+## Quick start
+
+### 1. Clone dan instal dependency
 
 ```bash
-# Clone/masuk ke repository
-cd /home/exwox/Documents/docker/xasset
-
-# Siapkan .env
-cp .env.example .env
-# Edit .env: ubah AUTH_SECRET (32+ karakter) dan ADMIN_PASSWORD (12+ karakter)
-
-# Jalankan (semuanya otomatis: Docker, DB, migrations, seed, web, worker)
-./run.sh
+git clone https://github.com/exwox/xasset.git
+cd xasset
+npm ci
 ```
 
-**Selesai!** ✅ Akses: http://localhost:3000
+`npm ci` juga menyalin asset runtime Cesium ke `public/cesium/`. Direktori tersebut dihasilkan otomatis dan tidak disimpan di Git.
 
-Login dengan:
-- **Email**: `admin@xasset.local`
-- **Password**: (dari `ADMIN_PASSWORD` di `.env`)
-
----
-
-### Langkah Demi Langkah (Manual, jika perlu)
-
-### 1. Salin konfigurasi environment
+### 2. Siapkan environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` dan ganti nilai berikut minimal:
+Ganti minimal:
 
-| Variabel | Wajib diubah? | Keterangan |
-|---|---|---|
-| `AUTH_SECRET` | ✅ | Minimal 32 karakter acak |
-| `ADMIN_PASSWORD` | ✅ | Minimal 12 karakter |
-| `DATABASE_URL` | ⚠️ | Sesuaikan jika port berbeda |
-| `S3_ENDPOINT` | ⚠️ | Default MinIO lokal `http://127.0.0.1:9100` |
+- `AUTH_SECRET`: string acak minimal 32 karakter.
+- `ADMIN_PASSWORD`: password awal Admin minimal 12 karakter.
+- Credential PostgreSQL, Redis, dan S3/MinIO untuk environment yang digunakan.
 
-### 2. Jalankan layanan infrastruktur
+Jangan commit file `.env`.
+
+### 3. Jalankan infrastruktur
 
 ```bash
 docker compose up -d
 ```
 
-Layanan yang disediakan oleh `compose.yaml`:
+Konfigurasi development menyediakan:
 
-| Layanan | Image | Port | Keterangan |
-|---|---|---|---|
-| **PostgreSQL** | `postgis/postgis:17-3.5-alpine` | `127.0.0.1:5432` | Database dengan ekstensi PostGIS |
-| **Redis** | `redis:7.4-alpine` | `127.0.0.1:6379` | Job queue (BullMQ) & rate limiter |
-| **MinIO** | `minio/minio` | `127.0.0.1:9100` (API) <br> `127.0.0.1:9101` (Console) | S3-compatible object storage |
+| Service            | Alamat           |
+| ------------------ | ---------------- |
+| PostgreSQL/PostGIS | `127.0.0.1:5432` |
+| Redis              | `127.0.0.1:6379` |
+| MinIO API          | `127.0.0.1:9100` |
+| MinIO Console      | `127.0.0.1:9101` |
 
-Admin/MinIO Console: `http://127.0.0.1:9101` (user/pass: `xasset` / `xasset_local_secret`)
-
-### 3. Jalankan migrasi database
-
-> **Catatan:** Skrip `tsx` tidak otomatis memuat `.env`. Gunakan salah satu cara berikut:
+### 4. Jalankan migration dan buat Admin
 
 ```bash
-# Cara 1: Export env vars dari .env (Linux/macOS)
-set -a && . ./.env && set +a
-npm run db:migrate
-
-# Cara 2: Gunakan Node.js --env-file (Node 22+)
-node --env-file=.env node_modules/.bin/tsx scripts/migrate.ts
-
-# Cara 3: Export satu per satu
-DATABASE_URL="postgresql://xasset:xasset_local_password@127.0.0.1:5432/xasset" npm run db:migrate
-```
-
-### 4. Seed akun administrator
-
-```bash
-set -a && . ./.env && set +a
-npm run db:seed-admin
-```
-
-Ini akan membuat akun admin berdasarkan `ADMIN_EMAIL` dan `ADMIN_PASSWORD` dari `.env`.
-
-### 5. Jalankan aplikasi
-
-Buka **dua terminal terpisah**:
-
-```bash
-# Terminal 1: Web server (Next.js dev) — Next.js otomatis memuat .env
-npm run dev
-
-# Terminal 2: Background worker (DXF processing) — perlu load .env manual
-set -a && . ./.env && set +a
-npm run worker
-```
-
-> **Catatan:** `npm run dev` secara otomatis menyalin aset Cesium yang dibutuhkan ke `public/cesium/` via hook `predev`. Skrip `tsx` (worker, migrate, dll.) **tidak** otomatis memuat `.env` — gunakan `set -a && . ./.env && set +a` atau `node --env-file=.env` (Node 22+).
-
-Akses aplikasi di: **http://localhost:3000**
-
----
-
-## ⚙️ Konfigurasi Lingkungan
-
-Salin dari `.env.example` dan sesuaikan. Berikut penjelasan tiap variabel:
-
-| Variabel | Default | Keterangan |
-|---|---|---|
-| `NODE_ENV` | `development` | `development` / `test` / `production` |
-| `APP_URL` | `http://localhost:3000` | Origin aplikasi (dipakai CSP & CSRF) |
-| `DATABASE_URL` | — | Connection string PostgreSQL (wajib PostGIS) |
-| `REDIS_URL` | — | Connection string Redis |
-| `AUTH_SECRET` | — | Secret JWT (≥ 32 karakter) |
-| `SESSION_TTL_SECONDS` | `28800` | Durasi sesi (detik) — default 8 jam |
-| `S3_ENDPOINT` | — | Endpoint S3/MinIO |
-| `S3_REGION` | `ap-southeast-1` | Region S3 |
-| `S3_BUCKET` | — | Nama bucket S3 |
-| `S3_ACCESS_KEY` | — | Access key S3 |
-| `S3_SECRET_KEY` | — | Secret key S3 |
-| `S3_FORCE_PATH_STYLE` | `true` | Gunakan path-style (untuk MinIO) |
-| `LOG_LEVEL` | `info` | `silent\|fatal\|error\|warn\|info\|debug\|trace` |
-| `ADMIN_EMAIL` | — | Email admin untuk seeding |
-| `ADMIN_PASSWORD` | — | Password admin (≥ 12 karakter) |
-
----
-
-## ▶️ Menjalankan Aplikasi
-
-### ⭐ Cara Termudah: Gunakan run.sh (Recommended)
-
-Hanya perlu 1 command — semua jalan otomatis (Docker, migrasi DB, seed, web server, worker):
-
-```bash
-./run.sh
-```
-
-Output:
-```
-🚀 XAsset Command Center — Development Mode
---- [1/5] Menjalankan infrastruktur...
---- [2/5] Menjalankan migrasi database...
---- [3/5] Seed akun administrator...
---- [4/5] Menjalankan development server (Next.js)...
-✅ Aplikasi siap di: http://localhost:3000
---- [5/5] Menjalankan background worker...
-```
-
-Aplikasi siap di: **http://localhost:3000** ✅
-
-**Untuk berhenti:** Tekan `Ctrl+C`
-
----
-
-### Command Alternatif (run.sh)
-
-| Perintah | Deskripsi |
-|---|---|
-| `./run.sh` | Jalankan development mode (default) — semua otomatis |
-| `./run.sh prod` | Jalankan production mode (Docker containers only) |
-| `./run.sh clean` | Stop dan hapus semua containers |
-
----
-
-### Manual Mode (Jika tidak ingin gunakan run.sh)
-
-**Terminal 1** — Web server:
-```bash
-npm run dev
-```
-
-**Terminal 2** — Background worker (di terminal terpisah):
-```bash
-set -a && . ./.env && set +a
-npm run worker
-```
-
-> **Catatan:** `npm run dev` secara otomatis menyalin aset Cesium dan memuat `.env`. Skrip `tsx` (worker) perlu load `.env` manual — gunakan `set -a && . ./.env && set +a`.
-
----
-
-### Mode Produksi (Docker)
-
-Gunakan `run.sh prod` (recommended) atau manual:
-
-```bash
-docker compose -f compose.production.yaml up -d
-```
-
----
-
-### Mode Test
-
-```bash
-# Siapkan .env.test
-cp .env.test .env
-# Edit .env: ganti port 5432->5433, 6379->6380 jika perlu custom
-
-# Jalankan migrasi & seed
-set -a && . ./.env && set +a
+set -a
+. ./.env
+set +a
 npm run db:migrate
 npm run db:seed-admin
-
-# Jalankan semua tes
-npm test
 ```
 
----
+Migration berjalan berurutan sampai `0014_admin_panel.sql`. Migration `0013_remove_maintenance_module.sql` menghapus modul Maintenance secara permanen dari schema aktif.
 
-## 🐳 Deployment Produksi
+### 5. Jalankan web dan worker
 
-Aplikasi dilengkapi **Dockerfile multi-stage** dan **compose.production.yaml**.
+Terminal pertama:
 
-### Cara Termudah: Gunakan run.sh
-
-```bash
-# Siapkan .env.production
-cp .env.example .env.production
-# Edit .env.production dengan nilai produksi (secret dari secrets manager)
-
-# Deploy dengan Docker (otomatis)
-./run.sh prod
-```
-
-Output:
-```
-✅ Production services started!
-   Web server: http://localhost:3000
-   Admin email: admin@xasset.local
-View logs: docker compose -f compose.production.yaml logs -f
-```
-
-**Untuk berhenti:** 
-```bash
-./run.sh clean
-```
-
----
-
-### Manual: Build & Deploy dengan Docker Compose
-
-```bash
-# Siapkan .env.production
-cp .env.example .env.production
-# Edit .env.production dengan nilai produksi (secret dari secrets manager)
-
-# Deploy
-docker compose -f compose.production.yaml up -d
-```
-
-`compose.production.yaml` mendefinisikan dua service:
-- **`web`** — Next.js standalone server (port 3000), read-only filesystem, health check
-- **`worker`** — DXF background worker
-
-### Build Manual
-
-```bash
-# Build image multi-stage
-docker build --target web -t xasset-web:latest .
-docker build --target worker -t xasset-worker:latest .
-
-# Jalankan
-docker run -d --name xasset-web --env-file .env.production -p 3000:3000 xasset-web:latest
-docker run -d --env-file .env.production xasset-worker:latest
-```
-
----
-
-## 📜 Skrip yang Tersedia
-
-Perintah di `package.json` dan skrip di `scripts/`:
-
-> **⚠️ Catatan:** Perintah yang berbasis `tsx` (`db:migrate`, `db:seed-admin`, `import:assets`, `reconcile:assets`, `validate:dxf`, `worker`) **tidak otomatis** memuat `.env`. Jalankan `set -a && . ./.env && set +a` terlebih dahulu, atau gunakan `node --env-file=.env node_modules/.bin/tsx ...`. Perintah `dev`, `build`, `start`, dan `test` (Next.js/Vitest) sudah memuat `.env` otomatis.
-
-### Pengembangan & Build
-| Perintah | Deskripsi |
-|---|---|
-| `npm run dev` | Jalankan development server |
-| `npm run build` | Build untuk produksi (`next build --webpack`) |
-| `npm start` | Jalankan production server |
-| `npm run check` | Jalankan typecheck + lint + test sekaligus |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript type checking |
-| `npm test` | Unit & integration tests (Vitest) |
-| `npm run format` | Format kode dengan Prettier |
-
-### Database
-| Perintah | Deskripsi |
-|---|---|
-| `npm run db:migrate` | Jalankan migration SQL dari `db/migrations/` (**perlu `.env`**) |
-| `npm run db:seed-admin` | Seed akun administrator (**perlu `.env`**) |
-
-### Import/Export Aset
-| Perintah | Deskripsi |
-|---|---|
-| `npm run import:assets -- /path/to/file.xlsx` | Import aset dari workbook Excel (**perlu `.env`**, gunakan `--dry-run` untuk preview) |
-| `npm run reconcile:assets -- /path/to/file.xlsx` | Bandingkan workbook dengan database, hasilkan laporan (**perlu `.env`**) |
-| `npm run import:assets -- /path/to/file.xlsx --dry-run` | Mode preview — tidak menulis ke database |
-
-**Template XLSX lengkap dengan panduan foto tertanam** tersedia di: `GET /api/assets/import/template`
-
-### DXF
-| Perintah | Deskripsi |
-|---|---|
-| `npm run validate:dxf -- /path/to/file.dxf` | Validasi & analisis DXF (entity count, layer, bounds, unit) |
-| `set -a && . ./.env && set +a && npm run worker` | Jalankan DXF processing worker |
-
-### Smoke & Test
-| Perintah | Deskripsi |
-|---|---|
-| `npm run smoke:all` | Jalankan seluruh suite smoke di Docker |
-| `npm run smoke:e2e` | Critical flow E2E (login → CRUD aset → archive → CSRF check) |
-| `npm run smoke:deployment` | Deployment smoke (health → login → asset → DXF → maintenance) |
-| `npm run test:security` | Security smoke (CSRF, rate limit, IDOR, injection, headers) |
-| `npm run test:load` | Load test (default: 200 request, p95 < 1500ms) |
-| `npm run test:integration` | Integration test terhadap database |
-
-### Backup & Restore
-| Skrip | Deskripsi |
-|---|---|
-| `bash scripts/backup.sh /absolute/backup/dir` | Backup database (pg_dump format custom) + SHA256 |
-| `CONFIRM_RESTORE=RESTORE_XASSET bash scripts/restore.sh /path/to/backup.dump` | Restore database (memerlukan konfirmasi) |
-| `bash scripts/verify-backup.sh /path/to/backup.dump` | Verifikasi integritas backup |
-
----
-
-## 📖 Panduan Operasional
-
-### 📋 Alur Penggunaan Lengkap dari Awal
-
-#### **Phase 1: Setup Awal Sistem**
-
-##### ⭐ Cara Tercepat (1 Command)
-
-```bash
-cd /home/exwox/Documents/docker/xasset
-cp .env.example .env
-# Edit .env: ubah AUTH_SECRET dan ADMIN_PASSWORD
-./run.sh
-```
-
-Selesai! ✅ Akses: http://localhost:3000
-
----
-
-##### Cara Manual (Jika perlu step-by-step)
-
-**Step 1: Persiapan Lingkungan**
-1. Clone repository dan masuk ke folder project:
-   ```bash
-   cd /home/exwox/Documents/docker/xasset
-   ```
-2. Salin file konfigurasi environment:
-   ```bash
-   cp .env.example .env
-   ```
-3. **Edit `.env`** dan sesuaikan parameter penting:
-   - `AUTH_SECRET` — ganti dengan 32+ karakter acak (misal: `x7kL9mN2pQ4rT6vW8yZ1aBcDeFgHiJkLmNoPqRsT`)
-   - `ADMIN_PASSWORD` — minimal 12 karakter (contoh: `AdminPassword123`)
-   - Database/Redis/S3 — gunakan default jika lokal, sesuaikan jika custom
-4. Jalankan infrastruktur (PostgreSQL, Redis, MinIO):
-   ```bash
-   docker compose up -d
-   ```
-   > Tunggu ~10 detik hingga semua service siap. Cek status: `docker compose ps`
-
-**Step 2: Inisialisasi Database**
-1. Load environment variables dan jalankan migrasi:
-   ```bash
-   set -a && . ./.env && set +a
-   npm run db:migrate
-   ```
-   > Ini membuat semua tabel, index, role, permission, dan master data (kelas aset, unit, frekuensi, dll.)
-
-2. Seed akun administrator:
-   ```bash
-   npm run db:seed-admin
-   ```
-   > Output: `Administrator ready: admin@xasset.local`
-
-**Step 3: Jalankan Aplikasi**
-**Terminal 1** — Web server:
 ```bash
 npm run dev
 ```
-> Output: `➜ Local: http://localhost:3000` (Next.js otomatis memuat `.env`)
 
-**Terminal 2** — Background worker (di terminal terpisah):
+Terminal kedua:
+
 ```bash
-set -a && . ./.env && set +a
+set -a
+. ./.env
+set +a
 npm run worker
 ```
-> Worker menunggu job DXF processing di Redis queue
-
-Aplikasi siap di: **http://localhost:3000**
-
----
-
-#### **Phase 2: Login & Navigasi Dashboard**
-
-##### Step 1: Login
-1. Buka browser ke `http://localhost:3000/login`
-2. Masukkan kredensial:
-   - **Email**: `admin@xasset.local` (dari `.env` `ADMIN_EMAIL`)
-   - **Password**: `AdminPassword123` (dari `.env` `ADMIN_PASSWORD`)
-3. Klik **"Masuk"**
-4. Berhasil → redirect ke dashboard utama `/`
-
-> **Troubleshoot:** Jika login gagal, pastikan:
-> - Docker compose sudah running (`docker compose ps`)
-> - Database sudah migrasi (`npm run db:migrate`)
-> - Admin sudah di-seed (`npm run db:seed-admin`)
-> - `AUTH_SECRET` di `.env` ≥ 32 karakter
-
-##### Step 2: Kenali Dashboard Utama (`/`)
-1. **Header** — menampilkan nama user, role, tombol logout
-2. **Sidebar** — navigasi menu:
-   - 📊 Dashboard (peta)
-   - 📦 Data Aset (`/assets`)
-   - 🗺️ DXF Management (`/dxf`)
-   - 🔧 Maintenance (`/maintenance`)
-   - ⚙️ Master Data (`/master-data`, hanya admin)
-   - 📋 Audit Log (`/audit`, hanya admin)
-3. **Peta 3D** — CesiumJS globe menampilkan semua aset (marker dengan label) di lokasi geografis mereka
-   - Klik marker untuk zoom ke aset
-   - Klik kartu aset di kanan untuk fly-to
-   - Gunakan mouse scroll untuk zoom, drag untuk pan
-   - Klik 🗺️ untuk ganti basemap (street/aerial/satellite)
-
----
-
-#### **Phase 3: Pengelolaan Aset**
-
-##### Workflow A: Buat Aset Manual (per item)
-
-1. Navigasi ke **Data Aset** → klik **"+ Tambah Aset"**
-2. Isi form:
-   - **Nama** — misal: "Pompa Bahan Bakar A1"
-   - **Kode** — misal: "PBB-A1" (unique)
-   - **Deskripsi** — (opsional) deskripsi lengkap
-   - **Kelas** — dropdown, misal: "Mesin Pompa"
-   - **Kategori** — dropdown, misal: "Electrical Equipment"
-   - **Lokasi** — pilih dari master data lokasi
-   - **Lokasi Detail** — room/sector (misal: "Ruang Genset")
-   - **Latitude / Longitude** — input manual atau klik peta untuk mendapatkan koordinat
-   - **Unit** — misal: "Unit"
-   - **Serial Number** — (opsional) untuk asset tracking
-   - **Tanggal Pemasangan** — calendar picker
-   - **Status** — Operational/Maintenance/Inspection
-3. Klik **Simpan**
-4. Aset muncul di peta dan daftar aset
-
-##### Workflow B: Import Aset Massal dari Excel
-
-1. **Unduh template XLSX:**
-   - Buka `GET /api/assets/import/template` atau klik tombol "Unduh Template" di halaman import
-   - File: `template-import-aset-xasset.xlsx`
-
-2. **Isi template Excel** (gunakan LibreOffice Calc / Excel):
-   - Isi sheet `Daftar Aset` tanpa mengubah nama header
-   - Tambah 1 baris per aset
-   - Masukkan gambar melalui **Insert → Pictures**, lalu posisikan sudut kiri atas gambar di kolom `Dokumentasi` pada baris aset yang sesuai
-   - Format foto: JPG, PNG, atau WebP, maksimal 10 MB per foto; ukuran workbook maksimal 50 MB
-   - Petunjuk lengkap tersedia pada sheet `Petunjuk Import`
-
-3. **Preview import** (validasi tanpa menulis DB):
-   ```bash
-   set -a && . ./.env && set +a
-   npm run import:assets -- /path/to/file.xlsx --dry-run
-   ```
-   > Hasilkan laporan: error baris, missing kolom, duplikat, dll.
-
-4. **Jika preview OK**, jalankan import:
-   ```bash
-   npm run import:assets -- /path/to/file.xlsx
-   ```
-   > Output: `Imported 45 assets, skipped 2 (see log for details)`
-
-5. **Verifikasi hasil**:
-   - Buka dashboard, lihat peta — marker sudah bertambah
-   - Buka **Data Aset** → lihat daftar aset baru
-   - Lakukan **reconciliation** untuk bandingkan dengan file original:
-     ```bash
-     npm run reconcile:assets -- /path/to/file.xlsx
-     ```
-
-##### Workflow C: Edit/Update Aset
-
-1. Di halaman **Data Aset**, cari aset (gunakan search atau filter)
-2. Klik baris aset → buka detail
-3. Klik **Edit** (pensil icon)
-4. Ubah field yang diperlukan:
-   - Sistem mendeteksi konflik concurrent edit (optimistic locking via `version`)
-   - Jika ada perubahan dari user lain, muncul warning → refresh dan coba lagi
-5. Klik **Simpan**
-6. Histori perubahan tercatat di **Audit Log**
-
-##### Workflow D: Soft-Delete (Archive) Aset
-
-1. Di daftar aset, cari aset yang ingin di-archive
-2. Klik 3-dot menu → **Archive**
-3. Konfirmasi: "Aset akan di-archive (soft-delete) dan tidak muncul di dashboard"
-4. Klik **Konfirmasi**
-5. Aset tetap di DB tapi tidak ditampilkan. Untuk restore: admin buka DB, `UPDATE assets SET deleted_at=NULL WHERE id=...`
-
----
-
-#### **Phase 4: Manajemen DXF (Gambar Teknik)**
-
-Lihat detail di [`docs/sop-dxf.md`](docs/sop-dxf.md). Ringkas:
-
-##### Workflow A: Upload DXF Baru
-
-1. Navigasi ke **DXF Management** (`/dxf`) → klik **"+ Upload DXF"**
-2. Isi form:
-   - **Nama** — misal: "Denah Lantai 1 Gedung A"
-   - **Change Note** — misal: "Update posisi mesin x500"
-   - **File** — pilih file `.dxf` (max 50 MB untuk upload browser; >50 MB gunakan direct S3 upload)
-3. Klik **Upload**
-4. Sistem:
-   - Validasi signature (magic bytes)
-   - Upload ke S3/MinIO
-   - Queue ke background worker
-   - Status: `Uploading` → `Queued` → `Processing` → `Ready`
-5. Tunggu status **Ready** (biasanya <1 menit untuk file normal, lebih lama jika > 10 MB)
-
-##### Workflow B: Kalibrasi (Georeference) DXF
-
-Setelah DXF status **Ready**, perlu set transformasi koordinat lokal DXF ↔ geografis (WGS84):
-
-1. Buka detail DXF yang sudah ready
-2. Tab **Georeference**
-3. Klik **"Tambah Control Point"** (minimal 2, disarankan ≥3 untuk akurasi affine)
-4. **Untuk setiap control point**:
-   - **Klik pada peta** → dapatkan latitude/longitude geografis
-   - **Input nilai DXF** → koordinat lokal DXF file (misal: unit meter atau lainnya)
-   - **Catatan** — misal: "Sudut barat laut bangunan"
-   - Klik **Simpan point**
-5. Setelah ≥2 point, klik **"Hitung & Simpan Transformasi"**
-   - Sistem hitung: transformation matrix (similarity/affine), residual error
-   - Tampilkan preview di peta (overlay DXF)
-6. **Jika error ≤ toleransi** (default: 10m), status OK → lanjut publish
-7. **Jika error > toleransi**: edit control point (klik untuk ubah) atau tambah point baru, hitung ulang
-
-##### Workflow C: Publish DXF
-
-Setelah transformasi OK:
-
-1. Klik **"Publish Versi"** di halaman detail DXF
-2. Konfirmasi: "Publish akan membuat versi ini menjadi active untuk overlay di peta"
-3. Klik **Konfirmasi**
-4. Status versi → **Published**
-5. Versi lama tetap tersedia di tab **Versions** untuk rollback
-
-##### Workflow D: Edit DXF di Web Editor
-
-1. Buka detail DXF published → tab **Editor** → klik **"Buat Edit Session"**
-2. Pilih **Base Version** (biasanya versi published terbaru)
-3. Klik **Create** — buka web editor `/dxf/{id}/edit`
-4. **Toolbar editor**:
-   - **Select** — pilih entitas (entity = LINE/POLYLINE/CIRCLE/ARC/TEXT)
-   - **Pan** — drag peta
-   - **Line** — gambar garis
-   - **Polyline** — polyline multi-segment
-   - **Circle** — lingkaran
-   - **Arc** — kurva
-   - **Text** — tambah text
-   - **Asset** — link aset ke lokasi DXF
-5. **Edit actions**:
-   - Klik entitas → properties panel muncul (layer, color, linetype, thickness)
-   - Drag entitas untuk move
-   - Right-click → rotate/scale/copy/delete
-   - **Snap** aktif (endpoint, midpoint, intersection, grid)
-   - **Undo/Redo** — Ctrl+Z / Ctrl+Y
-   - Multi-select: Shift+Click
-6. Klik **Simpan Draft** (interval otomatis setiap 2 menit)
-7. Klik **Ekspor DXF Baru** → download file `.dxf` baru
-8. File di-queue ke worker sebagai versi baru
-9. Setelah processing selesai, klik **Publish** untuk active versi baru
-
----
-
-#### **Phase 5: Pengelolaan Maintenance (Perawatan)**
-
-##### Workflow A: Setup Tipe Maintenance
-
-1. **Admin only** → **Master Data** → **Jenis Maintenance**
-2. Klik **"+ Tambah Jenis"**
-3. Isi:
-   - **Nama** — misal: "Preventive Maintenance (PM)"
-   - **Tipe** — dropdown: "Preventive" / "Corrective" / "Inspection"
-   - **Deskripsi** — (opsional)
-4. Klik **Simpan**
-   - Jenis umum sudah di-seed saat `db:migrate`
-
-##### Workflow B: Buat Jadwal Maintenance
-
-1. Navigasi ke **Data Aset**, cari aset → klik buka detail
-2. Tab **Maintenance** → klik **"+ Jadwalkan"**
-3. Isi form:
-   - **Tipe** — dropdown (misal: "Preventive Maintenance")
-   - **Tanggal Mulai** — calendar
-   - **Frekuensi** — dropdown: "Sekali", "Mingguan", "Bulanan", "Tahunan"
-   - **Catatan** — aktivitas maintenance (misal: "Ganti oli mesin")
-   - **Estimasi Durasi** — jam (misal: 2)
-   - **Estimasi Biaya** — IDR (misal: 500000)
-4. Klik **Jadwalkan**
-5. Jadwal muncul di **Maintenance** page dan dashboard (reminder jika dalam N hari)
-
-##### Workflow C: Update Status Maintenance
-
-1. Di **Maintenance** page, cari jadwal yang akan dikerjakan
-2. Klik buka detail jadwal
-3. Klik **Mulai Maintenance** → status: Scheduled → In Progress
-4. Setelah selesai, klik **Selesaikan**:
-   - Input actual cost (jika berbeda estimasi)
-   - Input actual duration
-   - Input catatan completion
-5. Klik **Selesai** → status: Completed
-6. Histori terekam di audit log
-
----
-
-#### **Phase 6: Manajemen Dokumen Aset**
-
-##### Workflow A: Upload Dokumen ke Aset
-
-1. Di **Data Aset** detail aset, tab **Dokumen**
-2. Klik **"+ Upload Dokumen"**
-3. Isi:
-   - **Kategori** — dropdown: "Manual Teknik", "Certificate", "Warranty", "Inspection Report", dll.
-   - **Deskripsi** — misal: "Manual mesin pompa model XYZ"
-   - **File** — pilih file PDF/JPG/PNG/DOC/XLSX (max 50 MB)
-4. Klik **Upload**
-   - Sistem validasi signature (magic bytes)
-   - Upload ke S3/MinIO
-   - Generate signed download URL
-5. Dokumen muncul di list, bisa di-download atau di-archive
-
-##### Workflow B: Download Dokumen
-
-1. Di tab **Dokumen**, klik file → download link signed URL
-2. Browser download file dari S3/MinIO
-3. Akses dicatat di audit log
-
----
-
-#### **Phase 7: Monitoring & Reporting**
-
-##### Dashboard Overview (`/`)
-- Peta 3D dengan semua aset
-- Widget: Total aset, aset maintenance (merah), aset inspection (kuning)
-- Reminder maintenance jatuh tempo hari ini/minggu depan
-- Akses cepat ke report
-
-##### Maintenance Report (`/maintenance`)
-- Summary: total jadwal, completed, pending, overdue
-- Filter by type, asset class, usage frequency
-- Export laporan ke XLSX
-
-##### Audit Log (`/audit`, admin only)
-- Semua aktivitas: login, create/update/delete aset, DXF publish, maintenance, dokumen
-- Filter: user, action, resource, tanggal
-- Export untuk compliance & investigasi
-
-##### Metrics (`/api/metrics`, admin only)
-- Prometheus metrics (HTTP requests, latency, DB pool, Redis queue)
-- Gunakan untuk monitoring real-time di Grafana/Prometheus
-
----
-
-#### **Phase 8: User Management & Role Control**
-
-##### Create User (Admin only)
-
-1. **Admin** → **Master Data** → **Users** (belum ada di UI v1, gunakan DB langsung atau API)
-2. Insert user ke table `users`:
-   ```sql
-   INSERT INTO users (email, name, password_hash, role_id, active)
-   SELECT 'operator@xasset.local', 'Operator Lantai 1', 
-          crypt('OperatorPassword123', gen_salt('bf')), 
-          id, true
-   FROM roles WHERE code='operator';
-   ```
-3. User bisa login dengan email & password baru
-4. Hanya bisa akses resources sesuai role permission
-
-##### Role & Permission
-
-- **Viewer**: Read-only, lihat peta & daftar aset, download dokumen
-- **Operator**: Viewer + buat/edit aset, kelola maintenance, upload dokumen
-- **DXF Editor**: Operator + edit/publish DXF (khusus tim teknik)
-- **Administrator**: Semua permission, kelola user, master data, audit, metrics
-
----
-
-### Import aset dari Excel
-
-1. Unduh template: `GET /api/assets/import/template`
-2. Isi data pada sheet `Daftar Aset`; tambahkan foto sebagai gambar tertanam di kolom `Dokumentasi`.
-3. **Preview** dulu untuk memastikan tidak ada error validasi:
-   ```bash
-   npm run import:assets -- /path/to/file.xlsx --dry-run
-   ```
-4. Jika OK, jalankan import tanpa `--dry-run`:
-   ```bash
-   npm run import:assets -- /path/to/file.xlsx
-   ```
-5. Lakukan reconciliation:
-      ```bash
-   npm run reconcile:assets -- /path/to/file.xlsx
-   ```
-
-### Upload & Publish DXF (lihat juga: `docs/sop-dxf.md`)
-
-1. Buka halaman **DXF Management** (`/dxf`).
-2. Klik **Upload DXF**, isi nama, change note, dan pilih file `.dxf`.
-3. Sistem mengalidasi signature, lalu worker mem-parse file di background.
-4. Setelah status **Ready**, isi **control point** (minimal 2, disarankan ≥3): klik pada peta untuk mendapatkan koordinat geografis, masukkan koordinat lokal DXF yang bersesuaian.
-5. Klik **"Hitung & simpan transformasi"** — sistem menghitung transformasi (similarity/affine) dan residual error.
-6. Jika residual ≤ toleransi, klik **Publish** untuk menerbitkan versi tersebut.
-7. Versi sebelumnya tetap tersedia untuk **rollback**.
-
-### Editor DXF Web
-
-1. Buka `/dxf/{id}/edit` (atau klik "Edit" dari halaman detail DXF).
-2. Pilih **base version** dan klik **Create Edit Session**.
-3. Gunakan toolbar: Select, Pan, Line, Polyline, Circle, Arc, Text, Asset.
-4. Pilih entitas untuk mengubah layer, warna, line type.
-5. Gunakan **snap** (endpoint, midpoint, intersection, grid).
-6. Klik **Simpan draft** untuk menyimpan progres.
-7. Klik **Ekspor versi DXF baru** untuk menghasilkan file `.dxf` yang diproses worker sebagai versi baru.
-
----
-
-## 🌐 Referensi API
-
-Semua endpoint API memerlukan otentikasi kecuali yang tercantum. Sesi disimpan dalam cookie HTTP-only `xasset_session`.
+
+Buka [http://localhost:3000](http://localhost:3000).
+
+Sebagai alternatif, gunakan `./run.sh` untuk menyiapkan stack development secara terpadu.
+
+## Konfigurasi environment
+
+| Variabel              | Fungsi                                            |
+| --------------------- | ------------------------------------------------- |
+| `NODE_ENV`            | `development`, `test`, atau `production`          |
+| `APP_URL`             | Origin aplikasi untuk CSP dan pemeriksaan request |
+| `DATABASE_URL`        | Connection string PostgreSQL/PostGIS              |
+| `REDIS_URL`           | Connection string Redis                           |
+| `AUTH_SECRET`         | Kunci penandatangan session, minimal 32 karakter  |
+| `SESSION_TTL_SECONDS` | Durasi session; default 28.800 detik              |
+| `S3_ENDPOINT`         | Endpoint MinIO/S3                                 |
+| `S3_REGION`           | Region object storage                             |
+| `S3_BUCKET`           | Bucket untuk DXF, foto, dan dokumen               |
+| `S3_ACCESS_KEY`       | Access key object storage                         |
+| `S3_SECRET_KEY`       | Secret key object storage                         |
+| `S3_FORCE_PATH_STYLE` | Gunakan `true` untuk MinIO                        |
+| `LOG_LEVEL`           | Level log Pino                                    |
+| `ADMIN_EMAIL`         | Email untuk seed Admin                            |
+| `ADMIN_PASSWORD`      | Password untuk seed Admin                         |
+
+## Penggunaan dashboard
+
+### Mencari dan memfilter aset
+
+Dashboard menyediakan:
+
+- Pencarian berdasarkan nomor, kode, deskripsi, class, dan lokasi.
+- Filter status lifecycle.
+- Filter Class Asset.
+- Filter semua posisi, sudah dipetakan, atau belum dipetakan.
+- Sinkronisasi pilihan aset antara daftar, marker/polygon, dan panel detail.
+
+### Menentukan posisi titik
+
+1. Pilih aset.
+2. Klik **Tentukan posisi** atau **Ubah posisi**.
+3. Klik titik pada peta.
+4. Koordinat latitude/longitude disimpan pada aset.
+5. Gunakan **Hapus posisi** untuk mengosongkan koordinat yang sudah direkam.
+
+### Menggambar polygon
+
+1. Pilih aset.
+2. Klik **Gambar polygon** atau **Ubah polygon**.
+3. Klik minimal tiga titik sudut pada peta.
+4. Gunakan **Undo** bila perlu, lalu klik **Simpan**.
+5. Pusat polygon otomatis menjadi posisi utama aset.
+6. Gunakan **Hapus polygon** untuk menghapus polygon tanpa menghapus posisi titik.
+
+### Mengedit aset dari dashboard
+
+Klik **Edit Asset** di samping status pada panel kanan. Form ditampilkan sebagai popup di atas peta, sehingga pengguna tidak perlu berpindah halaman.
+
+### Overlay DXF
+
+- Pilih dokumen pada menu **LAYER DXF**.
+- Dokumen tanpa georeference ditandai dan belum dapat digambar pada koordinat dunia.
+- Gunakan **DXF ON/OFF** di pojok kanan atas peta untuk menyembunyikan overlay.
+- Gunakan **MAP/SAT** untuk berpindah basemap dan **2D/3D** untuk mengganti mode.
+- Ketebalan garis dibuat ringan agar layer tidak menumpuk berlebihan saat zoom out.
+
+### Print atau PDF
+
+Klik **Print / PDF** pada toolbar dashboard. Dialog cetak browser memakai layout peta penuh dengan area kanan dan bawah tetap masuk halaman. Pilih **Save as PDF** untuk menyimpan.
+
+## Dataset aset
+
+Halaman `/assets` menyediakan:
+
+- Pencarian dan filter Class Asset/status.
+- Sorting dan pagination.
+- Pemilihan kolom yang ditampilkan.
+- Tambah dan edit aset melalui popup.
+- Import XLSX dengan preview.
+- Export XLSX beserta foto.
+- Hapus semua aset khusus Admin dengan konfirmasi `HAPUS SEMUA`.
+
+Penghapusan aset menggunakan soft archive agar data dapat dipulihkan dari database.
+
+## Import XLSX dan foto otomatis
+
+### Mengunduh template
+
+Klik **Template XLSX + Panduan Foto** pada halaman Data Aset atau gunakan:
+
+```text
+GET /api/assets/import/template
+```
+
+Workbook mempunyai dua sheet:
+
+- **Daftar Aset**: area pengisian data.
+- **Petunjuk Import**: panduan kolom, status, koordinat, dan foto.
+
+Header yang didukung:
+
+| Kolom                | Keterangan                                           |
+| -------------------- | ---------------------------------------------------- |
+| No                   | Nomor urut opsional                                  |
+| No Asset             | Wajib dan menjadi identitas unik                     |
+| Capitalized on       | Tanggal Excel atau `YYYY-MM-DD`                      |
+| Kode Aset            | Wajib                                                |
+| Class Asset          | Class aset; otomatis dibuat/diselaraskan saat import |
+| Asset description    | Wajib                                                |
+| Acquis.val.          | Nilai perolehan                                      |
+| Book val.            | Nilai buku                                           |
+| Quantity             | Angka nol atau lebih                                 |
+| Base Unit of Measure | Satuan                                               |
+| Location             | Lokasi                                               |
+| Sub Asset            | Referensi sub-aset dalam bentuk teks                 |
+| Dokumentasi          | Catatan dan area foto tertanam                       |
+| Lokasi / Layout      | Referensi lokasi/layout                              |
+| Status Aset          | Salah satu status lifecycle yang valid               |
+| Frekuensi Pemakaian  | Nilai master frekuensi aset                          |
+| Koordinat            | Format `latitude, longitude`                         |
+
+### Menambahkan foto di Excel
+
+1. Buka sheet **Daftar Aset**.
+2. Pilih **Insert → Pictures**.
+3. Tempatkan sudut kiri atas gambar di kolom **Dokumentasi (M)** dan pada baris aset yang sama.
+4. Beberapa gambar boleh ditempatkan pada baris yang sama.
+5. Jalankan **Import XLSX** dan periksa jumlah baris serta gambar pada preview.
+6. Konfirmasi import. Data aset dan gambar akan diunggah otomatis.
+
+Ketentuan:
+
+- Format gambar: JPG, PNG, atau WebP.
+- Maksimal 10 MB per gambar tertanam.
+- Maksimal 50 MB per workbook.
+- Nama header tidak boleh diubah.
+- Foto harus berupa gambar tertanam, bukan URL atau nama file.
+- Import CSV tidak didukung.
+
+### Export XLSX
+
+Klik **Export XLSX + Foto**. Hasil export mempertahankan kolom dataset dan menanam foto aset pada baris yang sesuai, sehingga workbook dapat diimpor kembali.
+
+## Pengelolaan DXF
+
+Seluruh upload dan pengelolaan DXF dilakukan di `/dxf`.
+
+Alur umum:
+
+1. Upload file `.dxf` atau buat versi baru dari dokumen yang sudah ada.
+2. Aplikasi mengunggah sumber ke object storage melalui signed URL.
+3. Worker memvalidasi dan memproses DXF menjadi data render terkompresi.
+4. Periksa jumlah entity, layer, bounds, unit, dan preview.
+5. Isi minimal dua control point untuk georeference.
+6. Atur visibility, warna, opacity, dan urutan layer.
+7. Publish versi yang sudah siap.
+8. Pilih dokumen tersebut sebagai overlay pada dashboard.
+
+Batas ukuran DXF adalah 250 MB. File sumber tidak ditimpa ketika membuat versi atau memakai editor.
+
+Editor DXF mendukung entity:
+
+- LINE
+- LWPOLYLINE/POLYLINE
+- CIRCLE
+- ARC
+- TEXT
+
+Operasi editor mencakup seleksi, multi-select, move, rotate, scale, copy, delete, snap, undo/redo, simpan session, dan export sebagai versi baru.
+
+## Foto dan dokumen aset
+
+Halaman detail aset mendukung:
+
+- Foto utama JPG, PNG, atau WebP.
+- Kategori photo, invoice, manual, certificate, inspection, dan other.
+- PDF, gambar, TXT, CSV, XLSX, serta DOCX.
+- Ukuran maksimal 25 MB per dokumen.
+- Validasi MIME dan signature file setelah upload.
+- Signed URL dengan masa berlaku terbatas untuk download.
+- Soft archive dokumen; object tetap tersimpan untuk recovery.
+- Histori perubahan aset.
+
+## Admin Panel
+
+### Active site
+
+Admin dapat:
+
+- Menambah bandara/site.
+- Mengubah kode dan nama site.
+- Menentukan longitude, latitude, dan ketinggian kamera awal.
+- Menjadikan salah satu site sebagai **Active Site**.
+
+Hanya satu site yang dapat aktif. Active site menjadi pusat awal dashboard serta default site untuk import dan DXF baru.
+
+### User management
+
+Admin dapat:
+
+- Membuat user baru.
+- Memilih role Admin, User, atau Viewer.
+- Mengaktifkan atau menonaktifkan user.
+- Melihat waktu login terakhir.
+
+Password user baru minimal 12 karakter.
+
+## API utama
+
+Semua endpoint selain login memerlukan session. Mutasi juga menjalankan pemeriksaan origin/CSRF dan permission.
 
 ### Autentikasi
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `POST` | `/api/auth/login` | — | Login (rate-limited: 10 req/15min per email) |
-| `POST` | `/api/auth/logout` | — | Logout |
-| `GET` | `/api/auth/me` | `asset:read` | Info pengguna saat ini |
 
-### Health & Metrics
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `GET` | `/api/health` | — | Cek readiness PostgreSQL, Redis, S3 |
-| `GET` | `/api/metrics` | `admin:manage` | Prometheus metrics |
+| Method | Endpoint           | Fungsi        |
+| ------ | ------------------ | ------------- |
+| POST   | `/api/auth/login`  | Login         |
+| POST   | `/api/auth/logout` | Logout        |
+| GET    | `/api/auth/me`     | Session aktif |
 
-### Aset
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `GET` | `/api/assets` | `asset:read` | List aset (filter: `q`, `status`, `classId`, `locationId`, `usageFrequencyId`, `sort`, `order`, `page`, `pageSize`, `bbox`) |
-| `POST` | `/api/assets` | `asset:write` | Buat aset baru |
-| `GET` | `/api/assets/{id}` | `asset:read` | Detail aset |
-| `PATCH` | `/api/assets/{id}` | `asset:write` | Update aset (optimistic locking via `version`) |
-| `DELETE` | `/api/assets/{id}` | `asset:write` | Soft-archive aset |
-| `GET` | `/api/assets/export/xlsx` | `asset:read` + `document:download` | Export XLSX beserta foto |
-| `GET` | `/api/assets/import/template` | `asset:read` | Download template XLSX dan panduan foto |
-| `POST` | `/api/assets/import` | `asset:write` | Import XLSX dan foto tertanam (support `mode=preview`) |
-| `GET` | `/api/assets/{id}/history` | `asset:read` | Histori audit log aset |
+### Aset dan XLSX
 
-### Dokumen Aset
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `GET` | `/api/assets/{id}/documents` | `asset:read` | List dokumen |
-| `POST` | `/api/assets/{id}/documents` | `document:upload` | Dapatkan signed URL upload |
-| `POST` | `/api/assets/{id}/documents/confirm` | `document:upload` | Konfirmasi upload (validasi signature) |
-| `GET` | `/api/assets/{id}/documents/{documentId}` | `document:download` | Dapatkan signed URL download |
-| `DELETE` | `/api/assets/{id}/documents/{documentId}` | `document:delete` | Archive dokumen (soft delete) |
+| Method           | Endpoint                      | Permission                         |
+| ---------------- | ----------------------------- | ---------------------------------- |
+| GET/POST         | `/api/assets`                 | `asset:read` / `asset:write`       |
+| GET/PATCH/DELETE | `/api/assets/{id}`            | `asset:read` / `asset:write`       |
+| POST             | `/api/assets/archive-all`     | `admin:manage`                     |
+| POST             | `/api/assets/import`          | `asset:write`                      |
+| GET              | `/api/assets/import/template` | `asset:read`                       |
+| GET              | `/api/assets/export/xlsx`     | `asset:read` + `document:download` |
+| GET              | `/api/assets/{id}/history`    | `asset:read`                       |
+
+### Dokumen
+
+| Method     | Endpoint                                  | Permission                              |
+| ---------- | ----------------------------------------- | --------------------------------------- |
+| GET/POST   | `/api/assets/{id}/documents`              | `asset:read` / `document:upload`        |
+| POST       | `/api/assets/{id}/documents/confirm`      | `document:upload`                       |
+| GET/DELETE | `/api/assets/{id}/documents/{documentId}` | `document:download` / `document:delete` |
+| GET        | `/api/assets/{id}/photo`                  | `asset:read`                            |
 
 ### DXF
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `GET` | `/api/dxf-documents` | `dxf:read` | List dokumen DXF |
-| `POST` | `/api/dxf-documents` | `dxf:write` | Upload DXF (dapatkan signed URL) |
-| `GET` | `/api/dxf-documents/{id}` | `dxf:read` | Detail dokumen + versi + layer |
-| `GET` | `/api/dxf-documents/{id}/versions/{versionId}` | `dxf:read` | URL download source/normalized |
-| `PATCH` | `/api/dxf-documents/{id}/versions/{versionId}` | `dxf:write` | Update layer visibility/color/opacity |
-| `DELETE` | `/api/dxf-documents/{id}/versions/{versionId}` | `dxf:publish` | Archive versi |
-| `GET` | `/api/dxf-documents/{id}/versions/{versionId}/render` | `dxf:read` | Render JSON compact v2 (tuple segments, indexed layers, transform) |
-| `POST` | `/api/dxf-documents/{id}/versions/{versionId}/confirm` | `dxf:write` | Konfirmasi upload → queue ke worker |
-| `PATCH` | `/api/dxf-documents/{id}/versions/{versionId}/georeference` | `dxf:write` | Set control point & transform matrix |
-| `POST` | `/api/dxf-documents/{id}/publish` | `dxf:publish` | Publish versi |
-| `GET` | `/api/dxf-documents/{id}/edit-sessions` | `dxf:read` | List edit session |
-| `POST` | `/api/dxf-documents/{id}/edit-sessions` | `dxf:write` | Buat edit session |
-| `GET` | `/api/dxf-documents/{id}/edit-sessions/{sessionId}` | `dxf:read` | Detail session |
-| `PATCH` | `/api/dxf-documents/{id}/edit-sessions/{sessionId}` | `dxf:write` | Save draft (optimistic locking) |
-| `POST` | `/api/dxf-documents/{id}/edit-sessions/{sessionId}/export` | `dxf:write` | Export DXF baru dari session |
-| `DELETE` | `/api/dxf-documents/{id}/edit-sessions/{sessionId}` | `dxf:write` | Discard edit session |
 
-### Maintenance
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `GET` | `/api/maintenance/report` | `maintenance:read` | Laporan summary, by type, by usage frequency |
-| `GET` | `/api/maintenance/reminders?days=30` | `maintenance:read` | Reminder jatuh tempo |
-| `GET` | `/api/maintenance/types` | `maintenance:read` | List jenis maintenance |
-| `POST` | `/api/maintenance/types` | `maintenance:write` | Buat jenis maintenance |
-| `PATCH` | `/api/maintenance/types/{typeId}` | `maintenance:write` | Update jenis maintenance |
-| `DELETE` | `/api/maintenance/types/{typeId}` | `maintenance:write` | Non-aktifkan jenis maintenance |
-| `GET` | `/api/assets/{id}/maintenance` | `maintenance:read` | List jadwal & histori |
-| `POST` | `/api/assets/{id}/maintenance` | `maintenance:write` | Buat jadwal maintenance |
-| `PATCH` | `/api/assets/{id}/maintenance/{scheduleId}` | `maintenance:write` | Update jadwal (start/complete/cancel) |
-| `DELETE` | `/api/assets/{id}/maintenance/{scheduleId}` | `maintenance:write` | Archive jadwal |
+| Method           | Endpoint                                                    | Fungsi                                |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------- |
+| GET/POST         | `/api/dxf-documents`                                        | Daftar dan upload DXF                 |
+| GET              | `/api/dxf-documents/{id}`                                   | Detail dokumen dan seluruh versi      |
+| POST             | `/api/dxf-documents/{id}/archive`                           | Archive dokumen DXF                   |
+| POST             | `/api/dxf-documents/{id}/publish`                           | Publish versi                         |
+| GET/PATCH/DELETE | `/api/dxf-documents/{id}/versions/{versionId}`              | Sumber, layer, dan archive versi      |
+| POST             | `/api/dxf-documents/{id}/versions/{versionId}/confirm`      | Konfirmasi upload dan antrekan worker |
+| PATCH            | `/api/dxf-documents/{id}/versions/{versionId}/georeference` | Simpan transform                      |
+| GET              | `/api/dxf-documents/{id}/versions/{versionId}/render`       | Data render peta                      |
+| GET/POST         | `/api/dxf-documents/{id}/edit-sessions`                     | Daftar/buat session editor            |
+| GET/PATCH/DELETE | `/api/dxf-documents/{id}/edit-sessions/{sessionId}`         | Buka, simpan, atau archive session    |
+| POST             | `/api/dxf-documents/{id}/edit-sessions/{sessionId}/export`  | Export versi baru                     |
 
-### Master Data
-| Method | Endpoint | Permission | Deskripsi |
-|---|---|---|---|
-| `GET` | `/api/master-data/{resource}` | `asset:read` | List (classes, categories, units, frequencies, sites, locations) |
-| `POST` | `/api/master-data/{resource}` | `admin:manage` | Buat master data |
-| `PATCH` | `/api/master-data/{resource}/{id}` | `admin:manage` | Update master data |
-| `DELETE` | `/api/master-data/{resource}/{id}` | `admin:manage` | Hapus master data |
+### Admin dan operasional
 
----
+| Method       | Endpoint                           | Fungsi                                 |
+| ------------ | ---------------------------------- | -------------------------------------- |
+| GET/POST     | `/api/admin/sites`                 | Daftar/tambah site                     |
+| PATCH        | `/api/admin/sites/{id}`            | Edit atau aktifkan site                |
+| GET/POST     | `/api/admin/users`                 | Daftar/tambah user                     |
+| PATCH        | `/api/admin/users/{id}`            | Role, status, nama, atau password user |
+| GET/POST     | `/api/master-data/{resource}`      | Daftar/tambah master data              |
+| PATCH/DELETE | `/api/master-data/{resource}/{id}` | Edit/hapus master data                 |
+| GET          | `/api/health`                      | Readiness PostgreSQL dan Redis         |
+| GET          | `/api/metrics`                     | Metrics Prometheus khusus Admin        |
 
-## 👥 Peran & Izin
+## Backup keseluruhan
 
-| Peran | Izin | Kemampuan |
-|---|---|---|
-| **Viewer** | `asset:read`, `dxf:read`, `maintenance:read`, `document:download` | Melihat peta, DXF, daftar aset, detail, dokumen |
-| **Operator** | + `asset:write`, `maintenance:write`, `document:upload`, `document:delete` | Kelola aset, maintenance, dokumentasi |
-| **DXF Editor** | `dxf:write`, `dxf:publish` | Edit/publish DXF, download dokumen |
-| **Administrator** | **Semua** permission | Kelola pengguna, role, master data, audit log, metrics |
+Data lengkap XAsset berada di dua tempat:
 
-> **Security note:** Administrator memiliki **semua** permission. Jangan gunakan untuk operasi rutin.
+1. PostgreSQL/PostGIS: aset, polygon, user, role, site, metadata DXF, metadata foto/dokumen, transform, dan audit log.
+2. S3/MinIO: file DXF asli, hasil render, foto, dan seluruh dokumen aset.
 
-### Status aset
-- **Operational** — Hijau: aset berfungsi normal
-- **Maintenance** — Merah: sedang maintenance aktif
-- **Inspection** — Kuning: dalam masa inspeksi/belum diperiksa
+Backup database saja belum mencakup DXF dan foto.
 
----
+### Backup database
 
-## ⚠️ Troubleshooting
+```bash
+set -a
+. ./.env
+set +a
+bash scripts/backup.sh /absolute/path/backup/database
+```
 
-| Masalah | Solusi |
-|---|---|
-| `ECONNREFUSED` pada `DATABASE_URL` | Pastikan `docker compose up -d` berjalan, lalu `set -a && . ./.env && set +a` sebelum `npm run db:migrate` |
-| DXF stuck di "processing" | Pastikan worker berjalan: `npm run worker` |
-| Login gagal setelah seed | Pastikan `ADMIN_PASSWORD` ≥ 12 karakter; cek `.env` |
-| Upload dokumen gagal (signature) | Pastikan file sesuai tipe MIME; sistem memvalidasi magic bytes |
-| Port 5432/6379/9100 sudah dipakai | Edit `compose.yaml`, ganti port mapping |
-| CORS/CSP error | Periksa `APP_URL` di `.env` sesuai origin yang diakses |
-| Performa lambat pada DXF besar | Gunakan background worker, jangan parse di browser; file >10MB hanya via worker |
+Skrip membuat PostgreSQL custom dump dan file checksum SHA-256.
 
----
+### Backup object storage
 
-## 📚 Dokumentasi Tambahan
+Aktifkan versioning serta replikasi off-site pada bucket produksi. Untuk salinan manual menggunakan MinIO Client:
 
-Dokumen lengkap tersedia di folder [`docs/`](docs/):
+```bash
+mc alias set xasset-minio "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+mc mirror --overwrite "xasset-minio/$S3_BUCKET" /absolute/path/backup/objects
+```
 
-| Dokumen | Deskripsi |
-|---|---|
-| [`docs/user-guide.md`](docs/user-guide.md) | Panduan penggunaan aplikasi (UI) |
-| [`docs/admin-guide.md`](docs/admin-guide.md) | Panduan administrator (role, backup, secret management) |
-| [`docs/operations.md`](docs/operations.md) | Operasional runbook (dev, health, backup/restore, prod requirements) |
-| [`docs/sop-dxf.md`](docs/sop-dxf.md) | SOP upload & publish DXF |
-| [`docs/go-live-checklist.md`](docs/go-live-checklist.md) | Checklist pra go-live produksi |
-| [`docs/uat-checklist.md`](docs/uat-checklist.md) | Checklist UAT & testing browser |
-| [`docs/phase-0-data-audit.md`](docs/phase-0-data-audit.md) | Audit data awal (aset & DXF) |
-| [`docs/incident-runbook.md`](docs/incident-runbook.md) | Panduan incident response |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Pedoman kontribusi & aturan commit |
+Gunakan nama bucket aktual bila berbeda dari `xasset`. Simpan database dump dan object storage snapshot dalam waktu yang berdekatan, terenkripsi, serta di lokasi berbeda dari VPS utama.
 
----
+### Verifikasi dan restore
 
-## 📄 Lisensi
+```bash
+bash scripts/verify-backup.sh /absolute/path/backup/database/xasset-TIMESTAMP.dump
 
-Proyek ini bersifat **private/perusahaan**. Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md) untuk aturan kontribusi dan konvensi kode.
+CONFIRM_RESTORE=RESTORE_XASSET \
+  bash scripts/restore.sh /absolute/path/backup/database/xasset-TIMESTAMP.dump
+```
 
----
+Uji restore terlebih dahulu pada environment staging. Setelah database dipulihkan, restore bucket object storage, jalankan migration terbaru, lalu uji login, dashboard, foto, dokumen, dan DXF.
 
-*Dokumen ini generatif — untuk pertanyaan atau koreksi, buat issue di repository atau hubungi tim platform.*
+## Perintah npm
+
+| Perintah                                | Fungsi                                |
+| --------------------------------------- | ------------------------------------- |
+| `npm run dev`                           | Development server                    |
+| `npm run build`                         | Build produksi Next.js                |
+| `npm start`                             | Menjalankan build produksi            |
+| `npm run worker`                        | Worker DXF                            |
+| `npm run db:migrate`                    | Menjalankan migration                 |
+| `npm run db:seed-admin`                 | Membuat/memperbarui Admin awal        |
+| `npm run import:assets -- file.xlsx`    | Import XLSX melalui CLI               |
+| `npm run reconcile:assets -- file.xlsx` | Rekonsiliasi workbook dengan database |
+| `npm run validate:dxf -- file.dxf`      | Validasi DXF                          |
+| `npm run check`                         | Typecheck, lint, dan test             |
+| `npm run test:integration`              | Integration test database             |
+| `npm run smoke:all`                     | Smoke test Docker                     |
+| `npm run test:security`                 | Security smoke test                   |
+
+## Verifikasi sebelum deployment
+
+```bash
+npm run check
+npm run build
+```
+
+Suite saat ini mencakup:
+
+- Authentication dan permission.
+- Validasi schema aset dan Admin.
+- Keamanan request dan signature file.
+- Koordinat, status lifecycle, dan DXF processing/editor.
+- Sinkronisasi daftar dengan peta.
+- Edit popup dashboard.
+- Print/PDF.
+- Penentuan/hapus posisi.
+- Gambar/hapus polygon.
+- Import/export XLSX dan foto tertanam.
+
+Integration test database memerlukan `INTEGRATION_DATABASE_URL`.
+
+## Deployment produksi
+
+`Dockerfile` menyediakan target:
+
+- `web`: Next.js standalone.
+- `worker`: background worker DXF.
+
+Build manual:
+
+```bash
+docker build --target web -t xasset-web:latest .
+docker build --target worker -t xasset-worker:latest .
+```
+
+Atau gunakan:
+
+```bash
+docker compose -f compose.production.yaml up -d
+```
+
+`compose.production.yaml` menjalankan service web dan worker. PostgreSQL, Redis, serta S3/MinIO harus sudah tersedia sesuai isi `.env.production`.
+
+Untuk produksi:
+
+- Gunakan TLS pada reverse proxy/ingress.
+- Simpan secret di secrets manager.
+- Jangan mengekspos PostgreSQL, Redis, dan object storage ke internet.
+- Jalankan web dan worker dari source/commit yang sama.
+- Aktifkan backup database dan replikasi bucket.
+- Pantau `/api/health`, worker, antrean Redis, koneksi database, kapasitas disk, dan kegagalan login.
+
+## Keamanan
+
+- Password disimpan menggunakan scrypt.
+- Session memakai JWT HS256 dalam cookie HTTP-only.
+- User nonaktif tidak dapat memakai session lama.
+- Permission diperiksa pada page dan API.
+- Request mutasi menjalankan validasi origin/CSRF.
+- Login mempunyai rate limiting.
+- Upload memakai signed URL serta validasi MIME/signature.
+- Log meredaksi password, authorization, cookie, secret, dan token.
+- Perubahan penting disimpan ke audit log.
+- Arsip aset, dokumen, dan DXF bersifat recoverable pada storage/database.
+
+## Struktur repository
+
+```text
+db/migrations/       Migration PostgreSQL/PostGIS
+docs/                Runbook dan panduan operasional
+public/              Asset publik; runtime Cesium dihasilkan otomatis
+scripts/             Migration, seed, backup, smoke test, import, dan DXF utility
+src/app/             Next.js pages dan route handlers
+src/components/      Dashboard, peta, modal, dan komponen UI
+src/lib/             Parser XLSX/DXF, koordinat, status, dan tipe domain
+src/server/          Database, auth, storage, schema, audit, dan service
+src/worker/          Background worker DXF
+```
+
+## Catatan pengembangan
+
+- Jangan mengubah migration yang sudah diterapkan; tambahkan migration baru.
+- Jangan commit `.env`, file DXF produksi, workbook produksi, backup, atau isi bucket.
+- Gunakan optimistic locking field `version` ketika memperbarui aset.
+- Jalankan `npm run check` sebelum commit.
+- Ikuti [CONTRIBUTING.md](CONTRIBUTING.md) untuk konvensi branch dan commit.
