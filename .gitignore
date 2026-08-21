@@ -1,0 +1,11 @@
+node_modules/
+.next/
+public/cesium/
+coverage/
+.env*
+!.env.example
+npm-debug.log*
+*.tsbuildinfo
+backups/
+import-report.json
+udo systemctl enable ollama
