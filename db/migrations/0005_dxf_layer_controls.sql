@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE dxf_layers ADD COLUMN opacity numeric(4,3) NOT NULL DEFAULT 1 CHECK(opacity BETWEEN 0 AND 1);
+COMMIT;

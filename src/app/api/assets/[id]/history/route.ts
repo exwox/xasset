@@ -1,0 +1,5 @@
+import { NextRequest,NextResponse } from "next/server";
+import { requireApiPermission } from "@/server/api-auth";
+import { query } from "@/server/db";
+interface Context{params:Promise<{id:string}>}
+export async function GET(request:NextRequest,context:Context){const auth=await requireApiPermission(request,"asset:read");if(auth instanceof NextResponse)return auth;const id=(await context.params).id;const result=await query(`SELECT al.id,al.action,al.before_data "before",al.after_data "after",al.created_at "createdAt",COALESCE(u.name,'System') actor FROM audit_logs al LEFT JOIN users u ON u.id=al.actor_user_id WHERE al.resource_type='asset' AND al.resource_id=$1::text UNION ALL SELECT ash.id,'asset.status_change',jsonb_build_object('status',ash.previous_status),jsonb_build_object('status',ash.new_status,'note',ash.note),ash.created_at,COALESCE(u.name,'System') FROM asset_status_history ash LEFT JOIN users u ON u.id=ash.changed_by WHERE ash.asset_id=$1::uuid ORDER BY "createdAt" DESC LIMIT 100`,[id]);return NextResponse.json({data:result.rows});}

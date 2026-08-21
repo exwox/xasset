@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+.env*
+!.env.example
+*.dump
+*.dxf
+*.xlsx
+coverage
+npm-debug.log*

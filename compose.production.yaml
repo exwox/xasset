@@ -1,0 +1,27 @@
+name: xasset-production
+services:
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    env_file: .env.production
+    ports: ["127.0.0.1:3000:3000"]
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    env_file: .env.production
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
