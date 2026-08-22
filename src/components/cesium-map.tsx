@@ -46,6 +46,9 @@ interface Props {
   onCancelPlace?: () => void;
 }
 const FALLBACK_SITE: ActiveSite = { id: "", code: "TNJ", name: "Tanjung Pinang", longitude: 104.5323, latitude: 0.9227, cameraHeight: 4200 };
+// Stop requesting Esri placeholder tiles beyond its reliable local imagery
+// resolution. Cesium will magnify the last available level when zooming closer.
+const SATELLITE_MAX_NATIVE_LEVEL = 18;
 
 // Detect a genuinely usable WebGL context. A context can exist but be broken
 // (e.g. software/remote rendering) reporting maxTextureSize = 0 or a degenerate
@@ -435,6 +438,7 @@ export function CesiumMap({
         : new UrlTemplateImageryProvider({
             url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
             credit: "Esri World Imagery",
+            maximumLevel: SATELLITE_MAX_NATIVE_LEVEL,
           });
       viewer.imageryLayers.addImageryProvider(provider);
     } catch (error) {

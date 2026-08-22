@@ -47,6 +47,10 @@ interface Props {
 }
 
 const SITE = { latitude: 0.9227, longitude: 104.5323 };
+// Esri World Imagery does not have uniform high-resolution coverage. Keep the
+// last reliable native tile and let Leaflet scale it at closer zoom levels.
+const SATELLITE_MAX_NATIVE_ZOOM = 18;
+const SATELLITE_MAX_DISPLAY_ZOOM = 22;
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -140,7 +144,9 @@ export function LeafletFallbackMap({
         : "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       {
         attribution: aerial ? "&copy; Esri, Maxar, Earthstar Geographics" : "&copy; OpenStreetMap contributors",
-        maxZoom: 19,
+        ...(aerial
+          ? { maxNativeZoom: SATELLITE_MAX_NATIVE_ZOOM, maxZoom: SATELLITE_MAX_DISPLAY_ZOOM }
+          : { maxZoom: 19 }),
       },
     ).addTo(map);
   }, [aerial]);

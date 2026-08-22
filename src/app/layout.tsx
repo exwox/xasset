@@ -27,7 +27,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/assets">Data Aset</Link>
             <Link href="/dxf">DXF</Link>
           </nav>
-          <small>© {new Date().getFullYear()} XAsset · Sistem informasi aset terintegrasi</small>
+          <small>© {new Date().getFullYear()} XAsset · exwox</small>
         </footer>
       </body>
     </html>

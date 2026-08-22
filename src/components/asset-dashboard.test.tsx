@@ -70,7 +70,9 @@ vi.mock("./cesium-map", () => ({
           >
             Tambah titik polygon uji
           </button>
-          <button disabled={polygonDraft.length < 3} onClick={onPolygonSave}>Simpan polygon uji</button>
+          <button disabled={polygonDraft.length < 3} onClick={onPolygonSave}>
+            Simpan polygon uji
+          </button>
           <button onClick={onCancelPlace}>Batalkan gambar polygon</button>
         </>
       )}
@@ -80,7 +82,10 @@ vi.mock("./cesium-map", () => ({
 
 beforeEach(() => {
   routerReplace.mockClear();
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })),
+  );
 });
 
 afterEach(() => {
@@ -146,11 +151,11 @@ describe("AssetDashboard list-to-map synchronization", () => {
     expect(screen.getByTestId("map-state").getAttribute("data-count")).toBe("2");
 
     expect(screen.getByText("No. 1")).toBeTruthy();
-    expect(screen.getByAltText("Foto Pompa utama").getAttribute("src")).toBe(
-      "/api/assets/mapped/photo?v=photo-1",
-    );
+    expect(screen.getByAltText("Foto Pompa utama").getAttribute("src")).toBe("/api/assets/mapped/photo?v=photo-1");
     expect(
-      screen.getByText((_, element) => element?.tagName === "SMALL" && element.textContent?.includes("No Asset 1001") === true),
+      screen.getByText(
+        (_, element) => element?.tagName === "SMALL" && element.textContent?.includes("No Asset 1001") === true,
+      ),
     ).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText(/Cari No, No Asset/i), { target: { value: "panel" } });
@@ -172,9 +177,35 @@ describe("AssetDashboard list-to-map synchronization", () => {
     expect(screen.getByTestId("map-state").getAttribute("data-selected")).toBe("mapped");
   });
 
+  it("provides list, map, and detail navigation for mobile layouts", () => {
+    const { container } = render(<AssetDashboard initialAssets={sample} />);
+
+    expect(screen.getByRole("navigation", { name: "Tampilan dashboard mobile" })).toBeTruthy();
+    expect(container.querySelector(".workspace")?.classList.contains("mobile-view-map")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /Daftar/ }));
+    expect(container.querySelector(".workspace")?.classList.contains("mobile-view-list")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /PANEL-02/ }));
+    expect(container.querySelector(".workspace")?.classList.contains("mobile-view-detail")).toBe(true);
+    expect(screen.getByRole("heading", { name: "Panel distribusi" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tutup detail aset" }));
+    expect(container.querySelector(".workspace")?.classList.contains("mobile-view-map")).toBe(true);
+  });
+
   it("uses the active site and only exposes management menus to authorized roles", () => {
-    const activeSite = { id: "site-bth", code: "BTH", name: "Bandar Udara Hang Nadim", longitude: 104.1188, latitude: 1.121, cameraHeight: 5200 };
-    const { rerender } = render(<AssetDashboard initialAssets={sample} activeSite={activeSite} userName="Viewer Satu" />);
+    const activeSite = {
+      id: "site-bth",
+      code: "BTH",
+      name: "Bandar Udara Hang Nadim",
+      longitude: 104.1188,
+      latitude: 1.121,
+      cameraHeight: 5200,
+    };
+    const { rerender } = render(
+      <AssetDashboard initialAssets={sample} activeSite={activeSite} userName="Viewer Satu" />,
+    );
     expect(screen.getAllByText("Bandar Udara Hang Nadim · BTH")).toHaveLength(2);
     expect(screen.getByTestId("map-state").getAttribute("data-site")).toBe("1.121,104.1188");
     expect(screen.queryByRole("link", { name: "DATA ASET" })).toBeNull();
@@ -207,10 +238,9 @@ describe("AssetDashboard list-to-map synchronization", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Simpan aset" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      "/api/assets/mapped",
-      expect.objectContaining({ method: "PATCH" }),
-    ));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/assets/mapped", expect.objectContaining({ method: "PATCH" })),
+    );
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pompa utama diperbarui" })).toBeTruthy());
     expect(routerReplace).not.toHaveBeenCalled();
   });
@@ -225,9 +255,11 @@ describe("AssetDashboard list-to-map synchronization", () => {
     expect(screen.getByRole("button", { name: /PANEL-02/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /PUMP-01/ })).toBeNull();
     const printReport = container.querySelector(".print-asset-report");
+    expect(printReport?.querySelector("h1")?.textContent).toBe("Data Aset - Electrical");
     expect(printReport?.textContent).toContain("Class: Electrical");
     expect(printReport?.textContent).toContain("Panel distribusi");
     expect(printReport?.textContent).not.toContain("Pompa utama");
+    expect(printReport?.querySelector(".print-report-footnote")?.textContent).toBe("generated by xasset");
   });
 
   it("offers a processed upload as a selectable top DXF layer", async () => {
@@ -290,17 +322,26 @@ describe("AssetDashboard list-to-map synchronization", () => {
 
   it("opens the browser print dialog for the current map view", () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
-    const { container } = render(<AssetDashboard initialAssets={sample} />);
+    const activeSite = {
+      id: "site-rhf",
+      code: "RHF",
+      name: "Bandar Udara Raja Haji Fisabilillah",
+      longitude: 104.5323,
+      latitude: 0.9227,
+      cameraHeight: 4200,
+    };
+    const { container } = render(<AssetDashboard initialAssets={sample} activeSite={activeSite} />);
 
     fireEvent.click(screen.getByRole("button", { name: /Print \/ PDF/i }));
 
     expect(print).toHaveBeenCalledOnce();
+    expect(container.querySelector(".print-map-title")?.textContent).toBe(
+      "Layout Bandar Udara Raja Haji Fisabilillah",
+    );
     const locationLinks = container.querySelectorAll<HTMLAnchorElement>(".print-asset-report .print-map-link");
     expect(locationLinks).toHaveLength(1);
     expect(locationLinks[0].textContent).toBe("Terminal 1");
-    expect(locationLinks[0].href).toBe(
-      "https://www.google.com/maps/search/?api=1&query=0.9227%2C104.5323",
-    );
+    expect(locationLinks[0].href).toBe("https://www.google.com/maps/search/?api=1&query=0.9227%2C104.5323");
   });
 
   it("focuses the map and can cancel position placement", () => {
@@ -323,19 +364,21 @@ describe("AssetDashboard list-to-map synchronization", () => {
     render(<AssetDashboard initialAssets={sample} positionAssetId="unmapped" />);
     fireEvent.click(screen.getByRole("button", { name: "Simpan titik uji" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      "/api/assets/unmapped",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({
-          longitude: 104.53234567,
-          latitude: 0.92276543,
-          coordinateText: "0.9227654, 104.5323457",
-          altitude: 0,
-          version: 1,
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/assets/unmapped",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            longitude: 104.53234567,
+            latitude: 0.92276543,
+            coordinateText: "0.9227654, 104.5323457",
+            altitude: 0,
+            version: 1,
+          }),
         }),
-      }),
-    ));
+      ),
+    );
     expect(routerReplace).toHaveBeenCalledWith("/?asset=unmapped");
   });
 
@@ -355,10 +398,9 @@ describe("AssetDashboard list-to-map synchronization", () => {
     fireEvent.click(addPoint);
     fireEvent.click(screen.getByRole("button", { name: "Simpan polygon uji" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      "/api/assets/unmapped",
-      expect.objectContaining({ method: "PATCH" }),
-    ));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/assets/unmapped", expect.objectContaining({ method: "PATCH" })),
+    );
     const request = fetchMock.mock.calls.find(([input]) => String(input) === "/api/assets/unmapped")?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({
       polygon: [
@@ -373,14 +415,16 @@ describe("AssetDashboard list-to-map synchronization", () => {
 
   it("removes a recorded asset position without removing its polygon", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    const withPolygon: Asset[] = [{
-      ...sample[0],
-      polygon: [
-        { longitude: 104.53, latitude: 0.92 },
-        { longitude: 104.54, latitude: 0.92 },
-        { longitude: 104.54, latitude: 0.93 },
-      ],
-    }];
+    const withPolygon: Asset[] = [
+      {
+        ...sample[0],
+        polygon: [
+          { longitude: 104.53, latitude: 0.92 },
+          { longitude: 104.54, latitude: 0.92 },
+          { longitude: 104.54, latitude: 0.93 },
+        ],
+      },
+    ];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       void _init;
       if (String(input) === "/api/assets/mapped")
@@ -407,14 +451,16 @@ describe("AssetDashboard list-to-map synchronization", () => {
 
   it("removes a recorded polygon without removing its position", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    const withPolygon: Asset[] = [{
-      ...sample[0],
-      polygon: [
-        { longitude: 104.53, latitude: 0.92 },
-        { longitude: 104.54, latitude: 0.92 },
-        { longitude: 104.54, latitude: 0.93 },
-      ],
-    }];
+    const withPolygon: Asset[] = [
+      {
+        ...sample[0],
+        polygon: [
+          { longitude: 104.53, latitude: 0.92 },
+          { longitude: 104.54, latitude: 0.92 },
+          { longitude: 104.54, latitude: 0.93 },
+        ],
+      },
+    ];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       void _init;
       if (String(input) === "/api/assets/mapped")

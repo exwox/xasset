@@ -35,7 +35,14 @@ export function AssetDashboard({
   canWrite = false,
   canManageData = false,
   canAdmin = false,
-  activeSite = { id: "", code: "TNJ", name: "Tanjung Pinang", longitude: 104.5323, latitude: 0.9227, cameraHeight: 4200 },
+  activeSite = {
+    id: "",
+    code: "TNJ",
+    name: "Tanjung Pinang",
+    longitude: 104.5323,
+    latitude: 0.9227,
+    cameraHeight: 4200,
+  },
   userName = "User",
 }: {
   initialAssets?: typeof fallbackAssets;
@@ -54,6 +61,7 @@ export function AssetDashboard({
   const [status, setStatus] = useState("Semua status");
   const [assetClass, setAssetClass] = useState("Semua class aset");
   const [mapping, setMapping] = useState("Semua posisi");
+  const [mobileView, setMobileView] = useState<"list" | "map" | "detail">(initialSelectedId ? "detail" : "map");
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     initialSelectedId && initialAssets.some((asset) => asset.id === initialSelectedId)
       ? initialSelectedId
@@ -70,7 +78,8 @@ export function AssetDashboard({
   const [mapDxf, setMapDxf] = useState<MapDxf[]>([]);
   const [dxfName, setDxfName] = useState("Belum ada DXF yang siap ditampilkan");
   const assetClasses = useMemo(
-    () => [...new Set(assets.map((asset) => asset.assetClass).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id")),
+    () =>
+      [...new Set(assets.map((asset) => asset.assetClass).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id")),
     [assets],
   );
   const filtered = useMemo(
@@ -101,9 +110,7 @@ export function AssetDashboard({
       return;
     }
     try {
-      const renderResponse = await fetch(
-        `/api/dxf-documents/${document.id}/versions/${document.mapVersionId}/render`,
-      );
+      const renderResponse = await fetch(`/api/dxf-documents/${document.id}/versions/${document.mapVersionId}/render`);
       if (!renderResponse.ok) throw new Error("Render DXF belum tersedia");
       const render = await renderResponse.json();
       const decodedSegments = decodeDxfSegments(render);
@@ -138,8 +145,9 @@ export function AssetDashboard({
         const result = await response.json();
         const documents = (result.data as MapDxf[]).filter((document) => document.mapVersionId);
         setMapDxf(documents);
-        const initial = documents.find((document) => document.status === "published" && document.mapTransform)
-          ?? documents.find((document) => document.mapTransform);
+        const initial =
+          documents.find((document) => document.status === "published" && document.mapTransform) ??
+          documents.find((document) => document.mapTransform);
         if (initial) await loadMapDxf(initial);
       } catch {
         // Optional overlay discovery must not block the asset dashboard.
@@ -255,17 +263,18 @@ export function AssetDashboard({
     if (!asset) return;
     const label = kind === "position" ? "posisi" : "polygon";
     if (!window.confirm(`Hapus ${label} aset ini?`)) return;
-    const changes = kind === "position"
-      ? {
-          longitude: null,
-          latitude: null,
-          altitude: null,
-          localX: null,
-          localY: null,
-          localZ: null,
-          coordinateText: null,
-        }
-      : { polygon: null };
+    const changes =
+      kind === "position"
+        ? {
+            longitude: null,
+            latitude: null,
+            altitude: null,
+            localX: null,
+            localY: null,
+            localZ: null,
+            coordinateText: null,
+          }
+        : { polygon: null };
     const response = await fetch(`/api/assets/${asset.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -297,16 +306,37 @@ export function AssetDashboard({
         </div>
         <div className="site">
           <span>ACTIVE SITE</span>
-          <strong>{activeSite.name} · {activeSite.code}</strong>
+          <strong>
+            {activeSite.name} · {activeSite.code}
+          </strong>
         </div>
         <div className="top-actions">
-          {canManageData && <Link href="/assets" className="data-link">DATA ASET</Link>}
-          {canManageData && <Link href="/dxf" className="data-link">DXF</Link>}
-          {canAdmin && <Link href="/admin" className="data-link">ADMIN</Link>}
+          {canManageData && (
+            <Link href="/assets" className="data-link">
+              DATA ASET
+            </Link>
+          )}
+          {canManageData && (
+            <Link href="/dxf" className="data-link">
+              DXF
+            </Link>
+          )}
+          {canAdmin && (
+            <Link href="/admin" className="data-link">
+              ADMIN
+            </Link>
+          )}
           <span className="live">
             <i /> SYSTEM LIVE
           </span>
-          <span className="avatar" title={userName}>{userName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>
+          <span className="avatar" title={userName}>
+            {userName
+              .split(/\s+/)
+              .slice(0, 2)
+              .map((part) => part[0])
+              .join("")
+              .toUpperCase()}
+          </span>
           <LogoutButton />
         </div>
       </header>
@@ -346,7 +376,34 @@ export function AssetDashboard({
           ⎙ Print / PDF
         </button>
       </section>
-      <section className="workspace">
+      <nav className="mobile-view-nav" aria-label="Tampilan dashboard mobile">
+        <button
+          type="button"
+          className={mobileView === "list" ? "active" : ""}
+          aria-pressed={mobileView === "list"}
+          onClick={() => setMobileView("list")}
+        >
+          Daftar <span>{filtered.length}</span>
+        </button>
+        <button
+          type="button"
+          className={mobileView === "map" ? "active" : ""}
+          aria-pressed={mobileView === "map"}
+          onClick={() => setMobileView("map")}
+        >
+          Peta
+        </button>
+        <button
+          type="button"
+          className={mobileView === "detail" ? "active" : ""}
+          aria-pressed={mobileView === "detail"}
+          disabled={!selected}
+          onClick={() => setMobileView("detail")}
+        >
+          Detail
+        </button>
+      </nav>
+      <section className={`workspace mobile-view-${mobileView}`}>
         <aside className="asset-panel">
           <div className="panel-heading">
             <div>
@@ -360,22 +417,24 @@ export function AssetDashboard({
               <button
                 key={asset.id}
                 className={`asset-card ${selectedId === asset.id ? "selected" : ""}`}
-                onClick={() => setSelectedId(asset.id)}
+                onClick={() => {
+                  setSelectedId(asset.id);
+                  setMobileView("detail");
+                }}
               >
                 <span className="asset-thumbnail" aria-hidden="true">
                   {asset.photoDocumentId ? (
-                    <img
-                      src={`/api/assets/${asset.id}/photo?v=${asset.photoDocumentId}`}
-                      alt=""
-                      loading="lazy"
-                    />
+                    <img src={`/api/assets/${asset.id}/photo?v=${asset.photoDocumentId}`} alt="" loading="lazy" />
                   ) : (
                     <span>⌑</span>
                   )}
                 </span>
                 <span className={`status-dot ${assetStatusClass(asset.maintenance)}`} />
                 <span className="card-main">
-                  <b><span className="directory-no">No. {asset.no}</span>{asset.assetCode}</b>
+                  <b>
+                    <span className="directory-no">No. {asset.no}</span>
+                    {asset.assetCode}
+                  </b>
                   <strong>{asset.description}</strong>
                   <small>
                     No Asset {asset.assetNumber} · {asset.assetClass} · {asset.location}
@@ -407,14 +466,19 @@ export function AssetDashboard({
           />
           <div className="map-title">
             <span>3D GEOSPATIAL VIEW</span>
-            <strong>{activeSite.name} · {activeSite.code}</strong>
+            <strong>
+              {activeSite.name} · {activeSite.code}
+            </strong>
           </div>
+          <div className="print-map-title">Layout {activeSite.name}</div>
           <div className="print-map-caption">
             <strong>XASSET · Tampilan Peta Aset</strong>
             <span>{dxfName}</span>
           </div>
           <div className="layer-menu">
-            <label htmlFor="map-dxf-layer"><i /> LAYER DXF</label>
+            <label htmlFor="map-dxf-layer">
+              <i /> LAYER DXF
+            </label>
             <select
               id="map-dxf-layer"
               aria-label="Layer DXF pada peta"
@@ -450,7 +514,15 @@ export function AssetDashboard({
           <aside className="detail-panel">
             <div className="detail-head">
               <span>ASSET DETAIL</span>
-              <button onClick={() => setSelectedId(null)}>×</button>
+              <button
+                aria-label="Tutup detail aset"
+                onClick={() => {
+                  setSelectedId(null);
+                  setMobileView("map");
+                }}
+              >
+                ×
+              </button>
             </div>
             <div className="asset-hero">
               {selected.photoDocumentId && (
@@ -467,7 +539,11 @@ export function AssetDashboard({
               </p>
               <div className="asset-status-actions">
                 <span className={`badge ${assetStatusClass(selected.maintenance)}`}>{selected.maintenance}</span>
-                {canWrite && <button type="button" onClick={() => setEditingAssetId(selected.id)}>Edit Asset</button>}
+                {canWrite && (
+                  <button type="button" onClick={() => setEditingAssetId(selected.id)}>
+                    Edit Asset
+                  </button>
+                )}
               </div>
             </div>
             <dl>
@@ -551,7 +627,7 @@ export function AssetDashboard({
         <header>
           <div>
             <span>XASSET · ASSET DIRECTORY</span>
-            <h1>Data Aset Berdasarkan Filter Map</h1>
+            <h1>Data Aset - {assetClass}</h1>
           </div>
           <strong>{filtered.length} aset</strong>
         </header>
@@ -600,34 +676,43 @@ export function AssetDashboard({
           </tbody>
         </table>
         {filtered.length === 0 && <p className="print-empty">Tidak ada aset yang sesuai dengan filter.</p>}
+        <footer className="print-report-footnote">generated by xasset</footer>
       </section>
-      {editingAssetId && (() => {
-        const asset = assets.find((item) => item.id === editingAssetId);
-        return asset ? (
-          <AssetEditModal
-            asset={asset as Asset & Record<string, unknown>}
-            onClose={() => setEditingAssetId(null)}
-            onSaved={(updated) => {
-              setAssets((current) => current.map((item) => item.id === updated.id ? {
-                ...item,
-                assetNumber: String(updated.assetNumber),
-                capitalizedOn: updated.capitalizedOn ? String(updated.capitalizedOn) : "",
-                assetCode: String(updated.assetCode),
-                description: String(updated.description),
-                acquisitionValue: Number(updated.acquisitionValue),
-                bookValue: Number(updated.bookValue),
-                quantity: Number(updated.quantity),
-                documentationNote: updated.documentationNote == null ? null : String(updated.documentationNote),
-                layout: String(updated.layout ?? "Belum dipetakan"),
-                coordinateText: updated.coordinateText == null ? null : String(updated.coordinateText),
-                maintenance: updated.maintenance as Asset["maintenance"],
-                version: Number(updated.version),
-              } : item));
-              setEditingAssetId(null);
-            }}
-          />
-        ) : null;
-      })()}
+      {editingAssetId &&
+        (() => {
+          const asset = assets.find((item) => item.id === editingAssetId);
+          return asset ? (
+            <AssetEditModal
+              asset={asset as Asset & Record<string, unknown>}
+              onClose={() => setEditingAssetId(null)}
+              onSaved={(updated) => {
+                setAssets((current) =>
+                  current.map((item) =>
+                    item.id === updated.id
+                      ? {
+                          ...item,
+                          assetNumber: String(updated.assetNumber),
+                          capitalizedOn: updated.capitalizedOn ? String(updated.capitalizedOn) : "",
+                          assetCode: String(updated.assetCode),
+                          description: String(updated.description),
+                          acquisitionValue: Number(updated.acquisitionValue),
+                          bookValue: Number(updated.bookValue),
+                          quantity: Number(updated.quantity),
+                          documentationNote:
+                            updated.documentationNote == null ? null : String(updated.documentationNote),
+                          layout: String(updated.layout ?? "Belum dipetakan"),
+                          coordinateText: updated.coordinateText == null ? null : String(updated.coordinateText),
+                          maintenance: updated.maintenance as Asset["maintenance"],
+                          version: Number(updated.version),
+                        }
+                      : item,
+                  ),
+                );
+                setEditingAssetId(null);
+              }}
+            />
+          ) : null;
+        })()}
     </main>
   );
 }
