@@ -1,9 +1,18 @@
 import type { NextConfig } from "next";
 
+function configuredAppHostname() {
+  try {
+    return process.env.APP_URL ? new URL(process.env.APP_URL).hostname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  allowedDevOrigins: [configuredAppHostname()].filter((origin): origin is string => Boolean(origin)),
   transpilePackages: ["@cesium/engine", "@cesium/widgets"],
   // Keep type checking in-process. The CLI mode spawns a detached compiler,
   // which is not supported by restricted/containerized build environments.
@@ -11,10 +20,17 @@ const nextConfig: NextConfig = {
     useTypeScriptCli: false,
   },
   async headers() {
-    const externalOrigins = [process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT, "https://tile.openstreetmap.org", "https://server.arcgisonline.com"].filter(Boolean);
+    const externalOrigins = [
+      process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT,
+      "https://tile.openstreetmap.org",
+      "https://server.arcgisonline.com",
+    ].filter(Boolean);
     const connect = ["'self'", ...externalOrigins].join(" ");
     const imgSrc = ["'self'", "data:", "blob:", ...externalOrigins].join(" ");
-    const scriptPolicy = process.env.NODE_ENV === "production" ? "'self' 'unsafe-inline' 'wasm-unsafe-eval'" : "'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
+    const scriptPolicy =
+      process.env.NODE_ENV === "production"
+        ? "'self' 'unsafe-inline' 'wasm-unsafe-eval'"
+        : "'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";
     const security = [
       {
         key: "Content-Security-Policy",

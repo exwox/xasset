@@ -76,6 +76,14 @@ Service development:
 
 Tekan `Ctrl+C` untuk menghentikan web dan worker. Container dependency tetap berjalan agar startup berikutnya lebih cepat.
 
+Jika development server perlu diakses dari komputer lain, URL browser harus diberikan sebagai origin aplikasi:
+
+```bash
+./run.sh dev http://203.0.113.10:3000
+```
+
+Argumen URL tersebut juga mengizinkan resource dan WebSocket HMR Next.js dari hostname yang sama. Untuk VPS publik, gunakan deployment production dengan domain dan HTTPS; mode development tidak ditujukan untuk layanan internet permanen.
+
 ## Deployment dari GitHub ke VPS
 
 Deployment production menggunakan satu stack Docker yang berisi:
@@ -154,14 +162,15 @@ Perintah tersebut tidak menghapus database atau object storage.
 
 ## Perintah runner
 
-| Perintah                        | Fungsi                                                   |
-| ------------------------------- | -------------------------------------------------------- |
-| `./run.sh`                      | Menjalankan development stack                            |
-| `./run.sh dev`                  | Sama dengan `./run.sh`                                   |
-| `./run.sh prod app.example.com` | Bootstrap deployment production pertama                  |
-| `./run.sh prod`                 | Build, migrate, seed, dan deploy ulang production        |
-| `./run.sh clean`                | Menghentikan container tanpa menghapus data              |
-| `./run.sh clean --volumes`      | Menghentikan container dan menghapus seluruh data Docker |
+| Perintah                          | Fungsi                                                   |
+| --------------------------------- | -------------------------------------------------------- |
+| `./run.sh`                        | Menjalankan development stack                            |
+| `./run.sh dev`                    | Sama dengan `./run.sh`                                   |
+| `./run.sh dev http://IP-VPS:3000` | Development sementara yang diakses dari komputer lain    |
+| `./run.sh prod app.example.com`   | Bootstrap deployment production pertama                  |
+| `./run.sh prod`                   | Build, migrate, seed, dan deploy ulang production        |
+| `./run.sh clean`                  | Menghentikan container tanpa menghapus data              |
+| `./run.sh clean --volumes`        | Menghentikan container dan menghapus seluruh data Docker |
 
 ## Menjalankan development secara manual
 

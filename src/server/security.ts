@@ -7,17 +7,26 @@ const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 export function isTrustedMutation(
   input: { method: string; origin?: string | null; secFetchSite?: string | null },
   appUrl: string,
+  requestOrigin?: string,
 ) {
   if (safeMethods.has(input.method.toUpperCase())) return true;
   if (input.secFetchSite === "cross-site") return false;
   if (!input.origin) return true;
   try {
-    return new URL(input.origin).origin === new URL(appUrl).origin;
+    const origin = new URL(input.origin).origin;
+    return (
+      origin === new URL(appUrl).origin || (requestOrigin !== undefined && origin === new URL(requestOrigin).origin)
+    );
   } catch {
     return false;
   }
 }
 export function trustedRequestOrigin(request: NextRequest) {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.headers.get("host");
+  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProtocol || request.nextUrl.protocol.replace(":", "");
+  const requestOrigin = host ? `${protocol}://${host}` : request.nextUrl.origin;
   return isTrustedMutation(
     {
       method: request.method,
@@ -25,6 +34,7 @@ export function trustedRequestOrigin(request: NextRequest) {
       secFetchSite: request.headers.get("sec-fetch-site"),
     },
     config().APP_URL,
+    requestOrigin,
   );
 }
 export function opaqueRateLimitKey(scope: string, value: string) {

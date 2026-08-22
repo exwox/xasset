@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 # XAsset runner
-#   ./run.sh                         Development
+#   ./run.sh                         Local development
+#   ./run.sh dev http://IP:3000      Development accessed from another host
 #   ./run.sh prod example.com        First production deployment on a VPS
 #   ./run.sh prod                    Subsequent production deployment
 #   ./run.sh clean [--volumes]       Stop containers (optionally delete data)
@@ -113,6 +114,10 @@ run_development() {
     npm ci
   fi
   load_env .env
+  if [ -n "${2:-}" ]; then
+    node -e "new URL(process.argv[1])" "$2" >/dev/null 2>&1 || die "URL development '$2' tidak valid."
+    export APP_URL="$2"
+  fi
   [ -n "${DATABASE_URL:-}" ] || die "DATABASE_URL wajib diisi di .env."
   [ -n "${ADMIN_EMAIL:-}" ] || die "ADMIN_EMAIL wajib diisi di .env."
   [ -n "${ADMIN_PASSWORD:-}" ] || die "ADMIN_PASSWORD wajib diisi di .env."

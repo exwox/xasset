@@ -7,6 +7,13 @@ describe("security boundaries", () => {
     expect(isTrustedMutation({ method: "GET", origin: "https://evil.test" }, "https://asset.example")).toBe(true);
     expect(isTrustedMutation({ method: "POST", secFetchSite: "cross-site" }, "https://asset.example")).toBe(false);
     expect(isTrustedMutation({ method: "PATCH", origin: "https://evil.test" }, "https://asset.example")).toBe(false);
+    expect(
+      isTrustedMutation(
+        { method: "POST", origin: "http://203.0.113.10:3000" },
+        "http://localhost:3000",
+        "http://203.0.113.10:3000",
+      ),
+    ).toBe(true);
     expect(isTrustedMutation({ method: "DELETE", origin: "https://asset.example" }, "https://asset.example")).toBe(
       true,
     );
