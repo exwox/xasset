@@ -140,6 +140,8 @@ git pull --ff-only
 
 Runner selalu menyelesaikan migration dan seed sebelum mengganti atau menyalakan service aplikasi.
 
+Seed tersebut juga mengaktifkan kembali akun Admin, menyamakan password dengan `ADMIN_PASSWORD`, dan membersihkan lock akibat percobaan login gagal.
+
 ### 4. Periksa deployment
 
 ```bash
@@ -276,6 +278,29 @@ set -a
 . ./.env
 set +a
 npm run db:migrate
+```
+
+## Mengatasi login gagal
+
+Untuk development yang dibuka melalui IP VPS, hentikan proses lama dengan `Ctrl+C`, tarik pembaruan, lalu jalankan menggunakan URL yang sama persis dengan alamat di browser:
+
+```bash
+git pull --ff-only
+./run.sh dev http://141.11.25.174:3000
+```
+
+`run.sh` menjalankan seed Admin pada setiap startup. Proses ini menyamakan akun dengan `ADMIN_EMAIL` dan `ADMIN_PASSWORD` di `.env`, mengaktifkan akun, serta membersihkan lock login. Password harus berisi minimal 12 karakter. Jika port 3000 masih digunakan proses lain, runner berhenti dengan error sehingga aplikasi lama tidak tertukar dengan proses baru di port 3001.
+
+Untuk production, ubah `ADMIN_PASSWORD` di `.env.production`, lalu jalankan kembali deployment agar password diterapkan dan lock dibersihkan:
+
+```bash
+./run.sh prod
+```
+
+Pesan pada form login membedakan kredensial salah, rate limit, origin aplikasi yang tidak sesuai, dan kegagalan koneksi/server. Periksa log bila form melaporkan masalah server:
+
+```bash
+docker compose --env-file .env.production -f compose.production.yaml logs --tail=200 web
 ```
 
 ## Backup dan restore

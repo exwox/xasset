@@ -118,6 +118,8 @@ run_development() {
     node -e "new URL(process.argv[1])" "$2" >/dev/null 2>&1 || die "URL development '$2' tidak valid."
     export APP_URL="$2"
   fi
+  local dev_port
+  dev_port="$(node -e 'const url=new URL(process.argv[1]); process.stdout.write(url.port || "3000")' "${APP_URL:-http://localhost:3000}")"
   [ -n "${DATABASE_URL:-}" ] || die "DATABASE_URL wajib diisi di .env."
   [ -n "${ADMIN_EMAIL:-}" ] || die "ADMIN_EMAIL wajib diisi di .env."
   [ -n "${ADMIN_PASSWORD:-}" ] || die "ADMIN_PASSWORD wajib diisi di .env."
@@ -133,7 +135,7 @@ run_development() {
   retry "Inisialisasi bucket" 3 3 bash scripts/init-s3.sh
   log "[5/5] Menyalakan Next.js dan background worker..."
   npm run predev
-  ./node_modules/.bin/next dev & DEV_PID=$!
+  ./node_modules/.bin/next dev --port "$dev_port" & DEV_PID=$!
   ./node_modules/.bin/tsx src/worker/dxf-worker.ts & WORKER_PID=$!
 
   cleanup() {
@@ -202,7 +204,7 @@ run_clean() {
 }
 
 case "$MODE" in
-  dev) run_development ;;
+  dev) run_development "$@" ;;
   prod) run_production "$@" ;;
   clean) run_clean "$@" ;;
   *) die "Mode '$MODE' tidak dikenal. Gunakan dev, prod, atau clean." ;;
