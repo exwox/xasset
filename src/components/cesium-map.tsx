@@ -23,17 +23,14 @@ import dynamic from "next/dynamic";
 import type { FallbackPoint } from "./leaflet-fallback-map";
 import { localToWorld } from "@/lib/coordinates";
 import { ASSET_STATUS_COLORS } from "@/lib/asset-status";
-import type { ActiveSite, Asset, Calibration, DxfLayerStyle, DxfSegment, DxfTransform, WorldPoint } from "@/lib/types";
+import type { ActiveSite, Asset, DxfMapOverlay, WorldPoint } from "@/lib/types";
 
 const LeafletFallbackMap = dynamic(() => import("./leaflet-fallback-map").then((mod) => mod.LeafletFallbackMap), { ssr: false });
 
 interface Props {
   assets: Asset[];
   selectedId: string | null;
-  segments: DxfSegment[];
-  calibration?: DxfTransform;
-  dxfLayers?: DxfLayerStyle[];
-  activeDxfDocumentId?: string;
+  dxfOverlays?: DxfMapOverlay[];
   positionAssetId?: string;
   polygonAssetId?: string;
   polygonDraft?: WorldPoint[];
@@ -74,20 +71,10 @@ function hasUsableWebGL(): boolean {
     return false;
   }
 }
-const fallbackCalibration: Calibration = {
-  origin: { longitude: 104.5318, latitude: 0.9218 },
-  localOrigin: { x: 0, y: 0 },
-  metersPerUnit: 1.4,
-  rotationDegrees: 8,
-};
-
 export function CesiumMap({
   assets,
   selectedId,
-  segments,
-  calibration = fallbackCalibration,
-  dxfLayers = [],
-  activeDxfDocumentId,
+  dxfOverlays = [],
   positionAssetId,
   polygonAssetId,
   polygonDraft = [],
@@ -102,13 +89,13 @@ export function CesiumMap({
   const container = useRef<HTMLDivElement>(null),
     viewerRef = useRef<Viewer | null>(null),
     assetSourceRef = useRef<CustomDataSource | null>(null),
-    dxfPrimitiveRef = useRef<Primitive | null>(null),
+    dxfPrimitiveRef = useRef<Map<string, Primitive>>(new Map()),
     selectRef = useRef(onSelect),
     placeRef = useRef(onPlace),
     positionRef = useRef(positionAssetId),
     polygonRef = useRef(polygonAssetId),
     polygonPointRef = useRef(onPolygonPoint);
-  const [dxfVisible, setDxfVisible] = useState(false),
+  const [dxfVisible, setDxfVisible] = useState(true),
     [mode, setMode] = useState<"2D" | "3D">("3D"),
     [basemap, setBasemap] = useState<"street" | "aerial">("street"),
     [webglOk, setWebglOk] = useState<boolean | null>(null);
@@ -227,6 +214,7 @@ export function CesiumMap({
         else if (id?.startsWith("asset-")) selectRef.current(id.slice(6));
       }, ScreenSpaceEventType.LEFT_CLICK);
       viewerRef.current = viewer;
+      const dxfPrimitives = dxfPrimitiveRef.current;
       
       return () => {
         if (viewerRef.current) {
@@ -234,7 +222,7 @@ export function CesiumMap({
           viewerRef.current = null;
         }
         assetSourceRef.current = null;
-        dxfPrimitiveRef.current = null;
+        dxfPrimitives.clear();
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error || 'Unknown error');
@@ -282,12 +270,15 @@ export function CesiumMap({
           },
         });
       }
+      const calibration = asset.dxfDocumentId
+        ? dxfOverlays.find((overlay) => overlay.documentId === asset.dxfDocumentId)?.transform
+        : undefined;
       const localPosition =
         asset.longitude == null &&
         asset.latitude == null &&
         asset.localX != null &&
         asset.localY != null &&
-        asset.dxfDocumentId === activeDxfDocumentId
+        calibration
           ? localToWorld({ x: asset.localX, y: asset.localY }, calibration)
           : null;
       const longitude = asset.longitude ?? localPosition?.longitude;
@@ -346,12 +337,9 @@ export function CesiumMap({
         });
     }
     viewer.dataSources.raiseToTop(source);
-    if (dxfPrimitiveRef.current) {
-      viewer.scene.primitives.remove(dxfPrimitiveRef.current);
-      dxfPrimitiveRef.current = null;
-    }
-    const layerStyles = new Map(dxfLayers.map((layer) => [layer.name, layer]));
-    if (dxfVisible && segments.length) {
+    for (const primitive of dxfPrimitiveRef.current.values()) viewer.scene.primitives.remove(primitive);
+    dxfPrimitiveRef.current.clear();
+    if (dxfVisible && dxfOverlays.some((overlay) => overlay.visible && overlay.segments.length)) {
       try {
         // Check if vertex texture fetching is supported (required for per-instance colors)
         const vtfContext = (viewer.scene as unknown as { context?: { maximumVertexTextureImageUnits?: number } }).context;
@@ -365,56 +353,63 @@ export function CesiumMap({
           return;
         }
 
-        const instances = segments.map((segment) => {
-          const start = localToWorld(segment.start, calibration),
-            end = localToWorld(segment.end, calibration);
-          const style = layerStyles.get(segment.layer);
-          const color = Color.fromCssColorString(style?.color ?? "#5eead4").withAlpha(style?.opacity ?? 0.9);
-          return new GeometryInstance({
-            geometry: new PolylineGeometry({
-              positions: Cartesian3.fromDegreesArrayHeights([
-                start.longitude,
-                start.latitude,
-                25,
-                end.longitude,
-                end.latitude,
-                25,
-              ]),
-              width: 1,
-              vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
-            }),
-            attributes: { color: ColorGeometryInstanceAttribute.fromColor(color) },
+        for (const overlay of dxfOverlays.filter((item) => item.visible && item.segments.length)) {
+          const layerStyles = new Map(overlay.layers.map((layer) => [layer.name, layer]));
+          const instances = overlay.segments.map((segment) => {
+            const start = localToWorld(segment.start, overlay.transform),
+              end = localToWorld(segment.end, overlay.transform);
+            const style = layerStyles.get(segment.layer);
+            const color = Color.fromCssColorString(style?.color ?? "#5eead4").withAlpha(style?.opacity ?? 0.9);
+            return new GeometryInstance({
+              geometry: new PolylineGeometry({
+                positions: Cartesian3.fromDegreesArrayHeights([
+                  start.longitude,
+                  start.latitude,
+                  25,
+                  end.longitude,
+                  end.latitude,
+                  25,
+                ]),
+                width: 1,
+                vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
+              }),
+              attributes: { color: ColorGeometryInstanceAttribute.fromColor(color) },
+            });
           });
-        });
-        const primitive = new Primitive({
-          geometryInstances: instances,
-          appearance: new PolylineColorAppearance({
-            translucent: true,
-            renderState: { depthTest: { enabled: true } },
-          }),
-          asynchronous: true,
-        });
-        dxfPrimitiveRef.current = viewer.scene.primitives.add(primitive);
-        viewer.scene.primitives.raiseToTop(primitive);
+          const primitive = new Primitive({
+            geometryInstances: instances,
+            appearance: new PolylineColorAppearance({
+              translucent: true,
+              renderState: { depthTest: { enabled: true } },
+            }),
+            asynchronous: true,
+          });
+          const added = viewer.scene.primitives.add(primitive);
+          dxfPrimitiveRef.current.set(overlay.documentId, added);
+          viewer.scene.primitives.raiseToTop(added);
+        }
       } catch (error) {
         console.warn("Failed to render DXF primitives:", error instanceof Error ? error.message : String(error));
         // DXF rendering failed, but don't crash - map still works
       }
     }
-  }, [activeDxfDocumentId, assets, calibration, dxfLayers, polygonAssetId, polygonDraft, segments, selectedId, dxfVisible]);
+  }, [assets, dxfOverlays, polygonAssetId, polygonDraft, selectedId, dxfVisible]);
   useEffect(() => {
     const viewer = viewerRef.current,
       asset = assets.find((item) => item.id === selectedId);
     if (!viewer || !asset) return;
+    const calibration = asset.dxfDocumentId
+      ? dxfOverlays.find((overlay) => overlay.documentId === asset.dxfDocumentId)?.transform
+      : undefined;
     const localPosition =
-      asset.localX != null && asset.localY != null && asset.dxfDocumentId === activeDxfDocumentId
+      asset.localX != null && asset.localY != null && calibration
         ? localToWorld({ x: asset.localX, y: asset.localY }, calibration)
         : null;
     const longitude = asset.longitude ?? localPosition?.longitude;
     const latitude = asset.latitude ?? localPosition?.latitude;
     if (longitude != null && latitude != null)
       viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(longitude, latitude, 240), duration: 1.1 });
-  }, [activeDxfDocumentId, assets, calibration, selectedId]);
+  }, [assets, dxfOverlays, selectedId]);
   function switchMode() {
     const next = mode === "3D" ? "2D" : "3D";
     setMode(next);
@@ -449,30 +444,41 @@ export function CesiumMap({
   }
   const fallbackPoints: FallbackPoint[] = [];
     for (const asset of assets) {
-      if (asset.longitude == null || asset.latitude == null) continue;
+      const calibration = asset.dxfDocumentId
+        ? dxfOverlays.find((overlay) => overlay.documentId === asset.dxfDocumentId)?.transform
+        : undefined;
+      const localPosition =
+        asset.localX != null && asset.localY != null && calibration
+          ? localToWorld({ x: asset.localX, y: asset.localY }, calibration)
+          : undefined;
+      const longitude = asset.longitude ?? localPosition?.longitude;
+      const latitude = asset.latitude ?? localPosition?.latitude;
+      if (longitude == null || latitude == null) continue;
       fallbackPoints.push({
         id: asset.id,
         no: asset.no,
         code: asset.assetCode,
         description: asset.description,
-        latitude: asset.latitude,
-        longitude: asset.longitude,
+        latitude,
+        longitude,
         selected: asset.id === selectedId,
         color: ASSET_STATUS_COLORS[asset.maintenance],
       });
     }
   const fallbackLines = dxfVisible
-    ? segments.map((segment) => {
-        const start = localToWorld(segment.start, calibration);
-        const end = localToWorld(segment.end, calibration);
-        const style = dxfLayers.find((layer) => layer.name === segment.layer);
-        return {
-          start,
-          end,
-          color: style?.color ?? "#5eead4",
-          opacity: style?.opacity ?? 0.9,
-        };
-      })
+    ? dxfOverlays.filter((overlay) => overlay.visible).flatMap((overlay) =>
+        overlay.segments.map((segment) => {
+          const start = localToWorld(segment.start, overlay.transform);
+          const end = localToWorld(segment.end, overlay.transform);
+          const style = overlay.layers.find((layer) => layer.name === segment.layer);
+          return {
+            start,
+            end,
+            color: style?.color ?? "#5eead4",
+            opacity: style?.opacity ?? 0.9,
+          };
+        }),
+      )
     : [];
   return (
     <>

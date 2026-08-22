@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { assets as fallbackAssets } from "@/lib/assets";
 import { decodeDxfSegments } from "@/lib/dxf-processing";
 import { ASSET_STATUSES, assetStatusClass } from "@/lib/asset-status";
-import type { ActiveSite, Asset, DxfLayerStyle, DxfSegment, DxfTransform, WorldPoint } from "@/lib/types";
+import type { ActiveSite, Asset, DxfLayerStyle, DxfMapOverlay, DxfTransform, WorldPoint } from "@/lib/types";
 import { CesiumMap } from "./cesium-map";
 import { AssetEditModal } from "./asset-edit-modal";
 import Link from "next/link";
@@ -71,12 +71,10 @@ export function AssetDashboard({
     polygonAssetId ? [...(initialAssets.find((asset) => asset.id === polygonAssetId)?.polygon ?? [])] : [],
   );
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
-  const [segments, setSegments] = useState<DxfSegment[]>([]);
-  const [calibration, setCalibration] = useState<DxfTransform | undefined>();
-  const [dxfLayers, setDxfLayers] = useState<DxfLayerStyle[]>([]);
-  const [activeDxfDocumentId, setActiveDxfDocumentId] = useState<string | undefined>();
+  const [dxfOverlays, setDxfOverlays] = useState<DxfMapOverlay[]>([]);
   const [mapDxf, setMapDxf] = useState<MapDxf[]>([]);
-  const [dxfName, setDxfName] = useState("Belum ada DXF yang siap ditampilkan");
+  const [loadingDxfIds, setLoadingDxfIds] = useState<string[]>([]);
+  const [dxfError, setDxfError] = useState<string>();
   const assetClasses = useMemo(
     () =>
       [...new Set(assets.map((asset) => asset.assetClass).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id")),
@@ -103,39 +101,62 @@ export function AssetDashboard({
     [assetClass, assets, mapping, query, status],
   );
   const selected = assets.find((asset) => asset.id === selectedId);
+  const visibleDxfOverlays = dxfOverlays.filter((overlay) => overlay.visible);
+  const visibleDxfSegments = visibleDxfOverlays.reduce((total, overlay) => total + overlay.segments.length, 0);
+  const dxfName = dxfError
+    ? dxfError
+    : loadingDxfIds.length
+      ? `Memuat ${loadingDxfIds.length} DXF...`
+      : visibleDxfOverlays.length
+        ? `${visibleDxfOverlays.length} DXF tampil · ${visibleDxfSegments.toLocaleString("id-ID")} segmen`
+        : dxfOverlays.length
+          ? "Semua layer DXF disembunyikan"
+          : "Belum ada DXF yang siap ditampilkan";
 
   const loadMapDxf = useCallback(async (document: MapDxf) => {
     if (!document.mapVersionId || !document.mapTransform) {
-      setDxfName(`${document.name} belum memiliki georeference.`);
+      setDxfError(`${document.name} belum memiliki georeference.`);
       return;
     }
+    setLoadingDxfIds((current) => (current.includes(document.id) ? current : [...current, document.id]));
+    setDxfError(undefined);
     try {
       const renderResponse = await fetch(`/api/dxf-documents/${document.id}/versions/${document.mapVersionId}/render`);
       if (!renderResponse.ok) throw new Error("Render DXF belum tersedia");
       const render = await renderResponse.json();
       const decodedSegments = decodeDxfSegments(render);
-      setSegments(decodedSegments);
-      setCalibration(render.transform ?? undefined);
-      setActiveDxfDocumentId(document.id);
-      setDxfLayers(
-        (render.layers ?? []).map((layer: DxfLayerStyle & { opacity: string | number }) => ({
+      const overlay: DxfMapOverlay = {
+        documentId: document.id,
+        versionId: document.mapVersionId,
+        versionNumber: document.mapVersionNumber ?? 0,
+        name: document.name,
+        segments: decodedSegments,
+        transform: render.transform ?? document.mapTransform,
+        layers: (render.layers ?? []).map((layer: DxfLayerStyle & { opacity: string | number }) => ({
           ...layer,
           opacity: Number(layer.opacity),
         })),
-      );
-      setDxfName(`${document.name} · v${document.mapVersionNumber} · ${decodedSegments.length} segmen`);
+        visible: true,
+      };
+      setDxfOverlays((current) => [...current.filter((item) => item.documentId !== document.id), overlay]);
     } catch (error) {
-      setDxfName(error instanceof Error ? error.message : "Layer DXF gagal dimuat");
+      setDxfError(`${document.name}: ${error instanceof Error ? error.message : "Layer DXF gagal dimuat"}`);
+    } finally {
+      setLoadingDxfIds((current) => current.filter((id) => id !== document.id));
     }
   }, []);
 
-  const clearMapDxf = useCallback(() => {
-    setSegments([]);
-    setCalibration(undefined);
-    setDxfLayers([]);
-    setActiveDxfDocumentId(undefined);
-    setDxfName("Layer DXF disembunyikan");
-  }, []);
+  const setMapDxfVisible = useCallback((document: MapDxf, visible: boolean) => {
+    const loaded = dxfOverlays.some((overlay) => overlay.documentId === document.id);
+    if (visible && !loaded) {
+      void loadMapDxf(document);
+      return;
+    }
+    setDxfError(undefined);
+    setDxfOverlays((current) =>
+      current.map((overlay) => (overlay.documentId === document.id ? { ...overlay, visible } : overlay)),
+    );
+  }, [dxfOverlays, loadMapDxf]);
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
@@ -145,10 +166,7 @@ export function AssetDashboard({
         const result = await response.json();
         const documents = (result.data as MapDxf[]).filter((document) => document.mapVersionId);
         setMapDxf(documents);
-        const initial =
-          documents.find((document) => document.status === "published" && document.mapTransform) ??
-          documents.find((document) => document.mapTransform);
-        if (initial) await loadMapDxf(initial);
+        await Promise.all(documents.filter((document) => document.mapTransform).map(loadMapDxf));
       } catch {
         // Optional overlay discovery must not block the asset dashboard.
       }
@@ -449,10 +467,7 @@ export function AssetDashboard({
           <CesiumMap
             assets={filtered}
             selectedId={selectedId}
-            segments={segments}
-            calibration={calibration}
-            dxfLayers={dxfLayers}
-            activeDxfDocumentId={activeDxfDocumentId}
+            dxfOverlays={dxfOverlays}
             positionAssetId={positionAssetId}
             polygonAssetId={polygonAssetId}
             polygonDraft={polygonDraft}
@@ -475,33 +490,56 @@ export function AssetDashboard({
             <strong>XASSET · Tampilan Peta Aset</strong>
             <span>{dxfName}</span>
           </div>
-          <div className="layer-menu">
-            <label htmlFor="map-dxf-layer">
-              <i /> LAYER DXF
-            </label>
-            <select
-              id="map-dxf-layer"
-              aria-label="Layer DXF pada peta"
-              value={activeDxfDocumentId ?? ""}
-              onChange={(event) => {
-                const document = mapDxf.find((item) => item.id === event.target.value);
-                if (document) void loadMapDxf(document);
-                else clearMapDxf();
-              }}
-            >
-              <option value="">Tanpa layer DXF</option>
-              {mapDxf.map((document) => (
-                <option value={document.id} key={document.id} disabled={!document.mapTransform}>
-                  {[document.siteName, document.buildingName, document.floorName, document.name]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  {` · v${document.mapVersionNumber} · ${document.mapVersionStatus === "published" ? "Published" : "Upload siap"}`}
-                  {!document.mapTransform ? " · perlu georeference" : ""}
-                </option>
-              ))}
-            </select>
-            <small>{dxfName}</small>
-          </div>
+          <details className="layer-menu">
+            <summary className="layer-menu-heading">
+              <span>
+                <i /> LAYER DXF
+              </span>
+              <span className="layer-menu-count">
+                {visibleDxfOverlays.length}/{mapDxf.length} ON
+              </span>
+            </summary>
+            <div className="layer-menu-content">
+              <span className="layer-menu-actions">
+                <button
+                  type="button"
+                  aria-label="Tampilkan semua layer DXF"
+                  onClick={() => mapDxf.filter((document) => document.mapTransform).forEach((document) => setMapDxfVisible(document, true))}
+                >
+                  Semua ON
+                </button>
+                <button
+                  type="button"
+                  aria-label="Sembunyikan semua layer DXF"
+                  onClick={() => setDxfOverlays((current) => current.map((overlay) => ({ ...overlay, visible: false })))}
+                >
+                  Semua OFF
+                </button>
+              </span>
+              <div className="map-dxf-layers" aria-label="Layer DXF pada peta">
+                {mapDxf.map((document) => (
+                  <label className="map-dxf-layer" key={document.id}>
+                    <input
+                      type="checkbox"
+                      checked={dxfOverlays.some((overlay) => overlay.documentId === document.id && overlay.visible)}
+                      disabled={!document.mapTransform || loadingDxfIds.includes(document.id)}
+                      onChange={(event) => setMapDxfVisible(document, event.target.checked)}
+                    />
+                    <span>
+                      <strong>{document.name}</strong>
+                      <small>
+                        {[document.siteName, document.buildingName, document.floorName].filter(Boolean).join(" · ")}
+                        {` · v${document.mapVersionNumber} · ${document.mapVersionStatus === "published" ? "Published" : "Upload siap"}`}
+                        {!document.mapTransform ? " · perlu georeference" : ""}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+                {!mapDxf.length && <span className="map-dxf-empty">Belum ada DXF siap.</span>}
+              </div>
+              <small className="layer-menu-status">{dxfName}</small>
+            </div>
+          </details>
           <div className="legend">
             {ASSET_STATUSES.map((item) => (
               <span key={item}>

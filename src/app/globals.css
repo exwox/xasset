@@ -475,43 +475,125 @@ button {
 }
 .layer-menu {
   position: absolute;
-  left: 18px;
-  bottom: 20px;
-  display: grid;
-  gap: 5px;
-  width: min(480px, 60%);
-  padding: 10px 12px;
+  left: 12px;
+  top: auto;
+  bottom: 12px;
+  z-index: 2050;
+  width: min(310px, 46%);
+  padding: 6px 7px;
   background: rgba(7, 18, 16, 0.88);
   border: 1px solid #35514b;
-  font-size: 9px;
+  font-size: 8px;
   backdrop-filter: blur(8px);
 }
-.layer-menu label {
+.layer-menu-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   color: var(--teal);
   font-weight: 700;
   letter-spacing: 0.08em;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.layer-menu-heading::-webkit-details-marker {
+  display: none;
+}
+.layer-menu-heading::after {
+  content: "▸";
+  color: var(--muted);
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+.layer-menu[open] .layer-menu-heading::after {
+  transform: rotate(90deg);
+}
+.layer-menu-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.layer-menu-content {
+  display: grid;
+  gap: 3px;
+  margin-top: 5px;
 }
 .layer-menu i {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   background: var(--teal);
-  margin-right: 7px;
+  margin-right: 4px;
 }
-.layer-menu select {
-  width: 100%;
+.layer-menu-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+}
+.layer-menu-actions button {
   border: 1px solid #35514b;
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 2px 4px;
   background: #0b1917;
   color: var(--text);
-  font-size: 10px;
+  font-size: 7px;
+  cursor: pointer;
 }
-.layer-menu small {
+.map-dxf-layers {
+  display: grid;
+  gap: 2px;
+  max-height: 88px;
+  overflow-y: auto;
+}
+.map-dxf-layer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 4px;
+  padding: 3px 5px;
+  border: 1px solid rgba(53, 81, 75, 0.75);
+  border-radius: 4px;
+  background: rgba(11, 25, 23, 0.78);
+  color: var(--text);
+  cursor: pointer;
+}
+.map-dxf-layer input {
+  width: 12px;
+  height: 12px;
+  margin: 1px 0 0;
+  accent-color: var(--teal);
+}
+.map-dxf-layer span,
+.map-dxf-layer strong,
+.map-dxf-layer small {
+  display: block;
+  min-width: 0;
+}
+.map-dxf-layer strong {
+  overflow: hidden;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-dxf-layer small {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 7px;
+  letter-spacing: 0;
+}
+.map-dxf-empty {
+  color: var(--muted);
+}
+.layer-menu-status {
   overflow: hidden;
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 7px;
 }
 .legend {
   position: absolute;
@@ -521,23 +603,23 @@ button {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
-  max-width: min(520px, 70%);
-  padding: 9px 11px;
+  gap: 7px;
+  max-width: min(380px, 55%);
+  padding: 6px 8px;
   background: rgba(7, 18, 16, 0.88);
   border: 1px solid #2b3c39;
-  font-size: 8px;
+  font-size: 7px;
   color: #afbfbc;
 }
 .legend span {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
 }
 .legend i {
   display: block;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 .asset-hero {
   padding: 21px 18px;
@@ -1760,17 +1842,19 @@ button {
     right: 10px;
   }
   .layer-menu {
-    left: 10px;
-    bottom: 74px;
-    width: calc(100% - 20px);
+    left: 8px;
+    top: auto;
+    bottom: 8px;
+    width: 56%;
   }
   .legend {
-    right: 10px;
-    bottom: 10px;
-    max-width: calc(100% - 20px);
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
+    right: 8px;
+    bottom: 8px;
+    max-width: 38%;
+    padding: 5px 7px;
+    gap: 3px 5px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .legend span {
     flex: 0 0 auto;
@@ -2822,7 +2906,8 @@ button {
     color: #f2faf7;
     font-weight: 650;
   }
-  .layer-menu select {
+  .map-dxf-layer,
+  .layer-menu-actions button {
     border-color: rgba(130, 193, 174, 0.26);
     border-radius: 7px;
     background: #0d201a;

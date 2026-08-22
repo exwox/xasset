@@ -78,3 +78,13 @@ export interface DxfLayerStyle {
   opacity: number;
   sortOrder: number;
 }
+export interface DxfMapOverlay {
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  name: string;
+  segments: DxfSegment[];
+  transform: DxfTransform;
+  layers: DxfLayerStyle[];
+  visible: boolean;
+}
