@@ -50,14 +50,6 @@ interface DocumentDetail extends DocumentSummary {
   versions: Version[];
 }
 
-interface PointInput {
-  localX: string;
-  localY: string;
-  longitude: string;
-  latitude: string;
-}
-
-const emptyPoint = (): PointInput => ({ localX: "", localY: "", longitude: "", latitude: "" });
 const DEFAULT_MAP_ORIGIN = { longitude: 104.5323, latitude: 0.9227 };
 
 function unitScale(unit: string | null) {
@@ -93,10 +85,6 @@ export function DxfManager({ canWrite, canPublish, canAdmin }: { canWrite: boole
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [message, setMessage] = useState("Siap");
   const [busy, setBusy] = useState(false);
-  const [points, setPoints] = useState<PointInput[]>([emptyPoint(), emptyPoint(), emptyPoint()]);
-  const [activePoint, setActivePoint] = useState(0);
-  const [transformMode, setTransformMode] = useState<"similarity" | "affine">("similarity");
-  const [georefMethod, setGeorefMethod] = useState<"manual" | "control-points">("manual");
   const [manualDraft, setManualDraft] = useState<{ versionId: string; transform: Calibration } | null>(null);
   const [renderDraft, setRenderDraft] = useState<{ versionId: string; segments: DxfSegment[] } | null>(null);
   const selectedVersion = useMemo(
@@ -226,34 +214,6 @@ export function DxfManager({ canWrite, canPublish, canAdmin }: { canWrite: boole
     }
   }
 
-  async function saveGeoreference() {
-    if (!detail || !selectedVersion) return;
-    const controlPoints = points.map((point) => ({
-      local: { x: Number(point.localX), y: Number(point.localY) },
-      world: { longitude: Number(point.longitude), latitude: Number(point.latitude) },
-    }));
-    if (points.some((point) => Object.values(point).some((value) => value.trim() === ""))) {
-      setMessage("Lengkapi seluruh koordinat control point.");
-      return;
-    }
-    setBusy(true);
-    const response = await fetch(`/api/dxf-documents/${detail.id}/versions/${selectedVersion.id}/georeference`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ controlPoints, transformMode, maximumResidualMeters: 5 }),
-    });
-    const result = await response.json();
-    setBusy(false);
-    if (!response.ok) return setMessage(result.message ?? result.error);
-    setMessage(
-      result.data.accepted
-        ? `Kalibrasi tersimpan. Residual ${result.data.transform.residualErrorMeters.toFixed(3)} m.`
-        : `Peringatan: residual ${result.data.transform.residualErrorMeters.toFixed(3)} m melebihi 5 m.`,
-    );
-    await loadDetail(detail.id);
-    setManualDraft(null);
-  }
-
   async function saveManualGeoreference() {
     if (!detail || !selectedVersion) return;
     setBusy(true);
@@ -368,37 +328,6 @@ export function DxfManager({ canWrite, canPublish, canAdmin }: { canWrite: boole
     ]);
   }
 
-  function pickLocal(event: React.MouseEvent<HTMLImageElement>) {
-    if (!selectedVersion?.bounds) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const bounds = selectedVersion.bounds;
-    const drawingWidth = Math.max(1, bounds.maxX - bounds.minX);
-    const drawingHeight = Math.max(1, bounds.maxY - bounds.minY);
-    const scale = Math.min(rect.width / drawingWidth, rect.height / drawingHeight);
-    const offsetX = (rect.width - drawingWidth * scale) / 2;
-    const offsetY = (rect.height - drawingHeight * scale) / 2;
-    const x = bounds.minX + (event.clientX - rect.left - offsetX) / scale;
-    const y = bounds.maxY - (event.clientY - rect.top - offsetY) / scale;
-    if (x < bounds.minX || x > bounds.maxX || y < bounds.minY || y > bounds.maxY) return;
-    setPoints((current) =>
-      current.map((point, index) =>
-        index === activePoint ? { ...point, localX: x.toFixed(4), localY: y.toFixed(4) } : point,
-      ),
-    );
-    setMessage(`Koordinat lokal CP ${activePoint + 1} diambil dari preview.`);
-  }
-
-  function pickWorld(point: { longitude: number; latitude: number }) {
-    setPoints((current) =>
-      current.map((item, index) =>
-        index === activePoint
-          ? { ...item, longitude: point.longitude.toFixed(7), latitude: point.latitude.toFixed(7) }
-          : item,
-      ),
-    );
-    setMessage(`Koordinat peta CP ${activePoint + 1} dipilih.`);
-  }
-
   return (
     <main className="dxf-shell">
       <header className="dxf-header">
@@ -490,8 +419,6 @@ export function DxfManager({ canWrite, canPublish, canAdmin }: { canWrite: boole
                       <img
                         src={selectedVersion.previewUrl}
                         alt={`Preview ${selectedVersion.fileName}`}
-                        onClick={pickLocal}
-                        title={`Klik untuk mengisi koordinat lokal CP ${activePoint + 1}`}
                       />
                     ) : (
                       <div className="dxf-progress">
@@ -558,165 +485,100 @@ export function DxfManager({ canWrite, canPublish, canAdmin }: { canWrite: boole
                     </div>
                   </section>
                   <section className="georef-card">
-                    <h3>Georeference</h3>
-                    <div className="georef-method-tabs" role="tablist" aria-label="Metode georeference">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={georefMethod === "manual"}
-                        className={georefMethod === "manual" ? "active" : ""}
-                        onClick={() => setGeorefMethod("manual")}
-                      >
-                        Pan & resize
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={georefMethod === "control-points"}
-                        className={georefMethod === "control-points" ? "active" : ""}
-                        onClick={() => setGeorefMethod("control-points")}
-                      >
-                        Control point
-                      </button>
-                    </div>
+                    <h3>Posisi visual DXF</h3>
                     <p>
-                      {georefMethod === "manual"
-                        ? "Drag DXF pada peta untuk menggeser. Sesuaikan skala dan rotasi sampai garis tepat menimpa basemap."
-                        : "Pilih CP aktif, klik titik yang sama pada preview DXF dan peta. Gunakan minimal tiga titik hasil survei untuk validasi residual."}
+                      Drag DXF pada peta untuk menggeser. Sesuaikan skala dan rotasi sampai garis tepat menimpa basemap.
                     </p>
                     <GeorefMap
                       key={`${detail.id}:${selectedVersion.id}`}
-                      mode={georefMethod}
                       segments={renderSegments}
                       transform={manualTransform}
                       onTransformChange={setManualTransform}
-                      onPick={pickWorld}
                     />
-                    {georefMethod === "manual" ? (
-                      <div className="manual-georef-panel">
-                        <div className="manual-transform-fields">
-                          <label>
-                            Longitude pusat
-                            <input
-                              type="number"
-                              step="any"
-                              value={manualTransform.origin.longitude}
-                              onChange={(event) => setManualTransform((current) => ({
-                                ...current,
-                                origin: { ...current.origin, longitude: Number(event.target.value) },
-                              }))}
-                            />
-                          </label>
-                          <label>
-                            Latitude pusat
-                            <input
-                              type="number"
-                              step="any"
-                              value={manualTransform.origin.latitude}
-                              onChange={(event) => setManualTransform((current) => ({
-                                ...current,
-                                origin: { ...current.origin, latitude: Number(event.target.value) },
-                              }))}
-                            />
-                          </label>
-                          <label>
-                            Skala (meter/unit)
-                            <input
-                              type="number"
-                              min="0.000000001"
-                              step="any"
-                              value={manualTransform.metersPerUnit}
-                              onChange={(event) => setManualTransform((current) => ({
-                                ...current,
-                                metersPerUnit: Math.max(1e-9, Number(event.target.value)),
-                              }))}
-                            />
-                          </label>
-                          <label>
-                            Rotasi (derajat)
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={manualTransform.rotationDegrees}
-                              onChange={(event) => setManualTransform((current) => ({
-                                ...current,
-                                rotationDegrees: Number(event.target.value),
-                              }))}
-                            />
-                          </label>
-                        </div>
-                        <div className="manual-transform-tools" aria-label="Kontrol penyesuaian DXF">
-                          <button type="button" onClick={() => nudgeManualTransform(0, 1)} title="Geser 1 meter ke utara">↑</button>
-                          <button type="button" onClick={() => nudgeManualTransform(-1, 0)} title="Geser 1 meter ke barat">←</button>
-                          <button type="button" onClick={() => nudgeManualTransform(1, 0)} title="Geser 1 meter ke timur">→</button>
-                          <button type="button" onClick={() => nudgeManualTransform(0, -1)} title="Geser 1 meter ke selatan">↓</button>
-                          <button type="button" onClick={() => setManualTransform((current) => ({ ...current, metersPerUnit: current.metersPerUnit * 0.9 }))}>− Skala</button>
-                          <button type="button" onClick={() => setManualTransform((current) => ({ ...current, metersPerUnit: current.metersPerUnit * 1.1 }))}>＋ Skala</button>
-                          <button type="button" onClick={() => setManualTransform(manualTransformForVersion(selectedVersion))}>Reset</button>
-                        </div>
-                        {canWrite && (
-                          <button
-                            type="button"
-                            className="manual-transform-save"
-                            disabled={busy || !["ready", "published"].includes(selectedVersion.status)}
-                            onClick={() => void saveManualGeoreference()}
-                          >
-                            Simpan posisi visual
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        <label className="transform-mode">
-                          Model transformasi
-                          <select
-                            value={transformMode}
-                            onChange={(event) => setTransformMode(event.target.value as "similarity" | "affine")}
-                          >
-                            <option value="similarity">Similarity — translasi, rotasi, skala seragam</option>
-                            <option value="affine">Affine — skala non-uniform dan shear</option>
-                          </select>
+                    <div className="manual-georef-panel">
+                      <div className="manual-transform-fields">
+                        <label>
+                          Longitude pusat
+                          <input
+                            type="number"
+                            step="any"
+                            value={manualTransform.origin.longitude}
+                            onChange={(event) => setManualTransform((current) => ({
+                              ...current,
+                              origin: { ...current.origin, longitude: Number(event.target.value) },
+                            }))}
+                          />
                         </label>
-                        {points.map((point, index) => (
-                          <div
-                            className={`control-point ${activePoint === index ? "active" : ""}`}
-                            key={index}
-                            onClick={() => setActivePoint(index)}
-                          >
-                            <b>CP {index + 1}</b>
-                            {(["localX", "localY", "longitude", "latitude"] as const).map((field) => (
-                              <label key={field}>
-                                {field}
-                                <input
-                                  type="number"
-                                  step="any"
-                                  value={point[field]}
-                                  onChange={(event) =>
-                                    setPoints((current) =>
-                                      current.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, [field]: event.target.value } : item,
-                                      ),
-                                    )
-                                  }
-                                />
-                              </label>
-                            ))}
-                          </div>
-                        ))}
-                        {canWrite && (
-                          <div className="georef-actions">
-                            <button onClick={() => setPoints((current) => [...current, emptyPoint()])}>＋ Point</button>
-                            <button
-                              className="primary"
-                              disabled={busy || !["ready", "published"].includes(selectedVersion.status)}
-                              onClick={() => void saveGeoreference()}
-                            >
-                              Hitung & simpan transformasi
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
+                        <label>
+                          Latitude pusat
+                          <input
+                            type="number"
+                            step="any"
+                            value={manualTransform.origin.latitude}
+                            onChange={(event) => setManualTransform((current) => ({
+                              ...current,
+                              origin: { ...current.origin, latitude: Number(event.target.value) },
+                            }))}
+                          />
+                        </label>
+                        <label>
+                          Skala (meter/unit)
+                          <input
+                            type="number"
+                            min="0.000000001"
+                            step="any"
+                            value={manualTransform.metersPerUnit}
+                            onChange={(event) => setManualTransform((current) => ({
+                              ...current,
+                              metersPerUnit: Math.max(1e-9, Number(event.target.value)),
+                            }))}
+                          />
+                        </label>
+                        <label>
+                          Rotasi (derajat)
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={manualTransform.rotationDegrees}
+                            onChange={(event) => setManualTransform((current) => ({
+                              ...current,
+                              rotationDegrees: Number(event.target.value),
+                            }))}
+                          />
+                        </label>
+                      </div>
+                      <div className="manual-transform-tools" aria-label="Kontrol penyesuaian DXF">
+                        <button type="button" onClick={() => nudgeManualTransform(0, 1)} title="Geser 1 meter ke utara">↑</button>
+                        <button type="button" onClick={() => nudgeManualTransform(-1, 0)} title="Geser 1 meter ke barat">←</button>
+                        <button type="button" onClick={() => nudgeManualTransform(1, 0)} title="Geser 1 meter ke timur">→</button>
+                        <button type="button" onClick={() => nudgeManualTransform(0, -1)} title="Geser 1 meter ke selatan">↓</button>
+                        <button
+                          type="button"
+                          title="Perkecil skala sekitar 1%"
+                          onClick={() => setManualTransform((current) => ({ ...current, metersPerUnit: current.metersPerUnit / 1.01 }))}
+                        >
+                          − Skala
+                        </button>
+                        <button
+                          type="button"
+                          title="Perbesar skala 1%"
+                          onClick={() => setManualTransform((current) => ({ ...current, metersPerUnit: current.metersPerUnit * 1.01 }))}
+                        >
+                          ＋ Skala
+                        </button>
+                        <button type="button" onClick={() => setManualTransform(manualTransformForVersion(selectedVersion))}>Reset</button>
+                      </div>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          className="manual-transform-save"
+                          disabled={busy || !["ready", "published"].includes(selectedVersion.status)}
+                          onClick={() => void saveManualGeoreference()}
+                        >
+                          Simpan posisi visual
+                        </button>
+                      )}
+                    </div>
                     <h3>Layer</h3>
                     <div className="dxf-layer-list">
                       {selectedVersion.layers.map((layer) => (

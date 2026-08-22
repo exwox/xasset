@@ -7,21 +7,17 @@ import { localToWorld } from "@/lib/coordinates";
 import type { Calibration, DxfSegment } from "@/lib/types";
 
 interface Props {
-  mode: "manual" | "control-points";
   segments: DxfSegment[];
   transform: Calibration;
   onTransformChange: (transform: Calibration) => void;
-  onPick: (point: { longitude: number; latitude: number }) => void;
 }
 
-export function GeorefMap({ mode, segments, transform, onTransformChange, onPick }: Props) {
+export function GeorefMap({ segments, transform, onTransformChange }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const overlayRef = useRef<L.LayerGroup | null>(null);
-  const callback = useRef(onPick);
   const transformCallback = useRef(onTransformChange);
   const transformRef = useRef(transform);
-  const modeRef = useRef(mode);
   const dragRef = useRef<{
     start: L.LatLng;
     origin: { longitude: number; latitude: number };
@@ -29,11 +25,9 @@ export function GeorefMap({ mode, segments, transform, onTransformChange, onPick
   } | null>(null);
 
   useEffect(() => {
-    callback.current = onPick;
     transformCallback.current = onTransformChange;
     transformRef.current = transform;
-    modeRef.current = mode;
-  }, [mode, onPick, onTransformChange, transform]);
+  }, [onTransformChange, transform]);
 
   useEffect(() => {
     if (!container.current) return;
@@ -50,14 +44,14 @@ export function GeorefMap({ mode, segments, transform, onTransformChange, onPick
     }).addTo(map);
     overlayRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
+    map.dragging.disable();
 
     map.on("mousedown", (event: L.LeafletMouseEvent) => {
-      if (modeRef.current !== "manual") return;
       dragRef.current = { start: event.latlng, origin: { ...transformRef.current.origin }, moved: false };
     });
     map.on("mousemove", (event: L.LeafletMouseEvent) => {
       const drag = dragRef.current;
-      if (!drag || modeRef.current !== "manual") return;
+      if (!drag) return;
       drag.moved = drag.moved || event.latlng.distanceTo(drag.start) > 0.05;
       const next = {
         ...transformRef.current,
@@ -71,7 +65,7 @@ export function GeorefMap({ mode, segments, transform, onTransformChange, onPick
     });
     map.on("mouseup", (event: L.LeafletMouseEvent) => {
       const drag = dragRef.current;
-      if (drag && !drag.moved && modeRef.current === "manual") {
+      if (drag && !drag.moved) {
         const next = {
           ...transformRef.current,
           origin: { longitude: event.latlng.lng, latitude: event.latlng.lat },
@@ -81,10 +75,6 @@ export function GeorefMap({ mode, segments, transform, onTransformChange, onPick
       }
       dragRef.current = null;
     });
-    map.on("click", (event: L.LeafletMouseEvent) => {
-      if (modeRef.current === "control-points")
-        callback.current({ longitude: event.latlng.lng, latitude: event.latlng.lat });
-    });
 
     return () => {
       map.remove();
@@ -93,13 +83,6 @@ export function GeorefMap({ mode, segments, transform, onTransformChange, onPick
       dragRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (mode === "manual") map.dragging.disable();
-    else map.dragging.enable();
-  }, [mode]);
 
   useEffect(() => {
     const layer = overlayRef.current;
@@ -123,8 +106,8 @@ export function GeorefMap({ mode, segments, transform, onTransformChange, onPick
   return (
     <div
       ref={container}
-      className={`georef-map ${mode === "manual" ? "manual" : "control-points"}`}
-      aria-label={mode === "manual" ? "Geser dan sesuaikan DXF pada peta" : "Pilih control point pada peta"}
+      className="georef-map manual"
+      aria-label="Geser dan sesuaikan DXF pada peta"
     />
   );
 }

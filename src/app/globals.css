@@ -2216,25 +2216,6 @@ button {
   color: var(--muted);
   font-size: 9px;
 }
-.georef-method-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-.georef-method-tabs button {
-  padding: 8px;
-  border: 1px solid var(--line);
-  background: #0d1c19;
-  color: var(--muted);
-  font-size: 8px;
-  cursor: pointer;
-}
-.georef-method-tabs button.active {
-  border-color: var(--teal);
-  background: #123029;
-  color: var(--teal);
-}
 .control-point {
   display: grid;
   grid-template-columns: 40px repeat(4, 1fr);
