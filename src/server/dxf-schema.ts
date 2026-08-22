@@ -36,6 +36,18 @@ export const georeferenceSchema = z.object({
   maximumResidualMeters: z.number().positive().max(1000).default(5),
 });
 
+export const manualGeoreferenceSchema = z.object({
+  method: z.literal("manual"),
+  transform: z.object({
+    origin: z.object({ longitude: z.number().min(-180).max(180), latitude: z.number().min(-90).max(90) }),
+    localOrigin: z.object({ x: z.number().finite(), y: z.number().finite() }),
+    metersPerUnit: z.number().positive().max(1_000_000),
+    rotationDegrees: z.number().finite().min(-3600).max(3600),
+  }),
+});
+
+export const georeferenceRequestSchema = z.union([manualGeoreferenceSchema, georeferenceSchema]);
+
 export const publishDxfSchema = z.object({ versionId: z.string().uuid() });
 
 export const dxfLayerSchema = z.object({

@@ -6,13 +6,13 @@ import {
   Cartesian3,
   Cartographic,
   Color,
-  ColorGeometryInstanceAttribute,
   CustomDataSource,
   GeometryInstance,
+  Material,
   Math as CesiumMath,
   OpenStreetMapImageryProvider,
-  PolylineColorAppearance,
   PolylineGeometry,
+  PolylineMaterialAppearance,
   Primitive,
   ScreenSpaceEventType,
   UrlTemplateImageryProvider,
@@ -59,14 +59,16 @@ function hasUsableWebGL(): boolean {
       | {
           MAX_TEXTURE_SIZE: number;
           ALIASED_LINE_WIDTH_RANGE: number;
+          MAX_VERTEX_TEXTURE_IMAGE_UNITS: number;
           getParameter: (p: number) => unknown;
         }
       | null;
     if (!gl) return false;
     const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    const vertexTextureUnits = gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) as number;
     // NB: ALIASED_LINE_WIDTH_RANGE is a Float32Array (typed array), NOT a plain array.
     const lineRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE) as Float32Array | number[] | null;
-    return maxTextureSize > 0 && !!lineRange && lineRange.length >= 2 && lineRange[1] >= 1;
+    return maxTextureSize > 0 && vertexTextureUnits > 0 && !!lineRange && lineRange.length >= 2 && lineRange[1] >= 1;
   } catch {
     return false;
   }
@@ -341,52 +343,49 @@ export function CesiumMap({
     dxfPrimitiveRef.current.clear();
     if (dxfVisible && dxfOverlays.some((overlay) => overlay.visible && overlay.segments.length)) {
       try {
-        // Check if vertex texture fetching is supported (required for per-instance colors)
-        const vtfContext = (viewer.scene as unknown as { context?: { maximumVertexTextureImageUnits?: number } }).context;
-        const supportsVTF =
-          typeof vtfContext?.maximumVertexTextureImageUnits === "number"
-            ? vtfContext.maximumVertexTextureImageUnits > 0
-            : true; // Assume supported if we can't check
-        
-        if (!supportsVTF) {
-          console.warn("WebGL vertex texture fetching not supported - DXF rendering disabled");
-          return;
-        }
-
         for (const overlay of dxfOverlays.filter((item) => item.visible && item.segments.length)) {
           const layerStyles = new Map(overlay.layers.map((layer) => [layer.name, layer]));
-          const instances = overlay.segments.map((segment) => {
-            const start = localToWorld(segment.start, overlay.transform),
-              end = localToWorld(segment.end, overlay.transform);
+          const styleGroups = new Map<string, { color: Color; segments: typeof overlay.segments }>();
+          for (const segment of overlay.segments) {
             const style = layerStyles.get(segment.layer);
             const color = Color.fromCssColorString(style?.color ?? "#5eead4").withAlpha(style?.opacity ?? 0.9);
-            return new GeometryInstance({
-              geometry: new PolylineGeometry({
-                positions: Cartesian3.fromDegreesArrayHeights([
-                  start.longitude,
-                  start.latitude,
-                  25,
-                  end.longitude,
-                  end.latitude,
-                  25,
-                ]),
-                width: 1,
-                vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
-              }),
-              attributes: { color: ColorGeometryInstanceAttribute.fromColor(color) },
+            const key = `${color.red}:${color.green}:${color.blue}:${color.alpha}`;
+            const group = styleGroups.get(key);
+            if (group) group.segments.push(segment);
+            else styleGroups.set(key, { color, segments: [segment] });
+          }
+          for (const [styleKey, group] of styleGroups) {
+            const instances = group.segments.map((segment) => {
+              const start = localToWorld(segment.start, overlay.transform),
+                end = localToWorld(segment.end, overlay.transform);
+              return new GeometryInstance({
+                geometry: new PolylineGeometry({
+                  positions: Cartesian3.fromDegreesArrayHeights([
+                    start.longitude,
+                    start.latitude,
+                    25,
+                    end.longitude,
+                    end.latitude,
+                    25,
+                  ]),
+                  width: 1,
+                  vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+                }),
+              });
             });
-          });
-          const primitive = new Primitive({
-            geometryInstances: instances,
-            appearance: new PolylineColorAppearance({
-              translucent: true,
-              renderState: { depthTest: { enabled: true } },
-            }),
-            asynchronous: true,
-          });
-          const added = viewer.scene.primitives.add(primitive);
-          dxfPrimitiveRef.current.set(overlay.documentId, added);
-          viewer.scene.primitives.raiseToTop(added);
+            const primitive = new Primitive({
+              geometryInstances: instances,
+              appearance: new PolylineMaterialAppearance({
+                translucent: group.color.alpha < 1,
+                material: Material.fromType("Color", { color: group.color }),
+                renderState: { depthTest: { enabled: true } },
+              }),
+              asynchronous: true,
+            });
+            const added = viewer.scene.primitives.add(primitive);
+            dxfPrimitiveRef.current.set(`${overlay.documentId}:${styleKey}`, added);
+            viewer.scene.primitives.raiseToTop(added);
+          }
         }
       } catch (error) {
         console.warn("Failed to render DXF primitives:", error instanceof Error ? error.message : String(error));

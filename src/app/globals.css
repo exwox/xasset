@@ -2216,6 +2216,25 @@ button {
   color: var(--muted);
   font-size: 9px;
 }
+.georef-method-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.georef-method-tabs button {
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: #0d1c19;
+  color: var(--muted);
+  font-size: 8px;
+  cursor: pointer;
+}
+.georef-method-tabs button.active {
+  border-color: var(--teal);
+  background: #123029;
+  color: var(--teal);
+}
 .control-point {
   display: grid;
   grid-template-columns: 40px repeat(4, 1fr);
@@ -2237,6 +2256,60 @@ button {
   border: 1px solid #31574f;
   cursor: crosshair;
   overflow: hidden;
+}
+.georef-map.manual {
+  cursor: move;
+}
+.manual-georef-panel {
+  display: grid;
+  gap: 8px;
+}
+.manual-transform-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.manual-transform-fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.manual-transform-fields input {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  background: #101f1c;
+  color: var(--text);
+  font-size: 9px;
+}
+.manual-transform-tools {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.manual-transform-tools button,
+.manual-transform-save {
+  min-height: 30px;
+  border: 1px solid #31574f;
+  background: #10201d;
+  color: var(--text);
+  font-size: 8px;
+  cursor: pointer;
+}
+.manual-transform-tools button:nth-last-child(-n + 3) {
+  grid-column: span 1;
+}
+.manual-transform-save {
+  padding: 9px;
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #062019;
+  font-weight: 700;
+}
+.manual-transform-save:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .transform-mode {
   display: grid;
@@ -2366,6 +2439,9 @@ button {
   .dxf-preview-card > img,
   .dxf-progress {
     height: 300px;
+  }
+  .manual-transform-fields {
+    grid-template-columns: 1fr;
   }
 }
 .login-page {
