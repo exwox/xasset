@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     useTypeScriptCli: false,
   },
   async headers() {
-    const externalOrigins = [process.env.S3_ENDPOINT, "https://tile.openstreetmap.org", "https://server.arcgisonline.com"].filter(Boolean);
+    const externalOrigins = [process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT, "https://tile.openstreetmap.org", "https://server.arcgisonline.com"].filter(Boolean);
     const connect = ["'self'", ...externalOrigins].join(" ");
     const imgSrc = ["'self'", "data:", "blob:", ...externalOrigins].join(" ");
     const scriptPolicy = process.env.NODE_ENV === "production" ? "'self' 'unsafe-inline' 'wasm-unsafe-eval'" : "'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'";

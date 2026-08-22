@@ -22,6 +22,8 @@
 
 ## Production Requirements
 
+- Arahkan domain aplikasi dan subdomain `storage` ke VPS, lalu deploy pertama kali dengan `./run.sh prod app.example.com`.
+- Backup named volume PostgreSQL dan MinIO sebelum upgrade; jangan gunakan `./run.sh clean --volumes` pada production kecuali seluruh data memang akan dihapus.
 - Store secrets in a secrets manager; never bake them into an image.
 - Terminate TLS at the ingress and pass trusted proxy headers.
 - Restrict PostgreSQL, Redis, MinIO, metrics, and admin endpoints to private networks.

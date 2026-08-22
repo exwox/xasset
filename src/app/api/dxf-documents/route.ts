@@ -6,7 +6,7 @@ import { writeAudit } from "@/server/audit";
 import { config } from "@/server/config";
 import { query, transaction } from "@/server/db";
 import { dxfUploadSchema } from "@/server/dxf-schema";
-import { storage } from "@/server/storage";
+import { publicStorage } from "@/server/storage";
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiPermission(request, "dxf:read");
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
   });
   if (versionNumber == null) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const uploadUrl = await getSignedUrl(
-    storage(),
+    publicStorage(),
     new PutObjectCommand({
       Bucket: config().S3_BUCKET,
       Key: sourceKey,

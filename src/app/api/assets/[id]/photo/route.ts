@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "@/server/api-auth";
 import { config } from "@/server/config";
 import { query } from "@/server/db";
-import { storage } from "@/server/storage";
+import { publicStorage } from "@/server/storage";
 
 interface Context {
   params: Promise<{ id: string }>;
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest, context: Context) {
   if (!photo) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const url = await getSignedUrl(
-    storage(),
+    publicStorage(),
     new GetObjectCommand({
       Bucket: config().S3_BUCKET,
       Key: photo.objectKey,

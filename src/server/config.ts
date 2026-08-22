@@ -8,6 +8,7 @@ const schema = z.object({
   AUTH_SECRET: z.string().min(32),
   SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(28800),
   S3_ENDPOINT: z.string().url(),
+  S3_PUBLIC_ENDPOINT: z.string().url().optional(),
   S3_REGION: z.string().default("ap-southeast-1"),
   S3_BUCKET: z.string().min(1),
   S3_ACCESS_KEY: z.string().min(1),

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "@/server/api-auth";
 import { config } from "@/server/config";
 import { query } from "@/server/db";
-import { storage } from "@/server/storage";
+import { publicStorage } from "@/server/storage";
 
 interface Context {
   params: Promise<{ id: string }>;
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest, context: Context) {
     versions.rows.map(async ({ preview_file_key, ...version }) => ({
       ...version,
       previewUrl: preview_file_key
-        ? await getSignedUrl(storage(), new GetObjectCommand({ Bucket: config().S3_BUCKET, Key: preview_file_key }), {
+        ? await getSignedUrl(publicStorage(), new GetObjectCommand({ Bucket: config().S3_BUCKET, Key: preview_file_key }), {
             expiresIn: 300,
           })
         : null,

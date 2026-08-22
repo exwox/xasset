@@ -6,7 +6,7 @@ import { writeAudit } from "@/server/audit";
 import { config } from "@/server/config";
 import { query, transaction } from "@/server/db";
 import { dxfLayerSchema } from "@/server/dxf-schema";
-import { storage } from "@/server/storage";
+import { publicStorage } from "@/server/storage";
 
 interface Context {
   params: Promise<{ id: string; versionId: string }>;
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, context: Context) {
   const version = result.rows[0];
   if (!version) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const sourceUrl = await getSignedUrl(
-    storage(),
+    publicStorage(),
     new GetObjectCommand({
       Bucket: config().S3_BUCKET,
       Key: version.source_file_key,
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest, context: Context) {
   );
   const normalizedUrl = version.normalized_file_key
     ? await getSignedUrl(
-        storage(),
+        publicStorage(),
         new GetObjectCommand({ Bucket: config().S3_BUCKET, Key: version.normalized_file_key }),
         { expiresIn: 300 },
       )

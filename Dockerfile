@@ -6,8 +6,18 @@ COPY scripts/copy-cesium-assets.mjs ./scripts/copy-cesium-assets.mjs
 RUN npm ci
 
 FROM dependencies AS builder
+ARG S3_PUBLIC_ENDPOINT
+ENV S3_PUBLIC_ENDPOINT=$S3_PUBLIC_ENDPOINT
 COPY . .
 RUN npm run build
+
+FROM dependencies AS migrate
+COPY tsconfig.json ./
+COPY db/migrations ./db/migrations
+COPY scripts/migrate.ts scripts/seed-admin.ts ./scripts/
+COPY src/server/password.ts ./src/server/password.ts
+USER node
+CMD ["./node_modules/.bin/tsx","scripts/migrate.ts"]
 
 FROM node:24-bookworm-slim AS web
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
