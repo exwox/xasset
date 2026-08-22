@@ -117,12 +117,17 @@ run_development() {
   if [ -n "${2:-}" ]; then
     node -e "new URL(process.argv[1])" "$2" >/dev/null 2>&1 || die "URL development '$2' tidak valid."
     export APP_URL="$2"
+    export S3_PUBLIC_ENDPOINT="$(node -e 'const url=new URL(process.argv[1]); const host=url.hostname.includes(":") ? `[${url.hostname}]` : url.hostname; process.stdout.write(`${url.protocol}//${host}:9100`)' "$APP_URL")"
+    export S3_API_BIND_ADDRESS="0.0.0.0"
   fi
   local dev_port
   dev_port="$(node -e 'const url=new URL(process.argv[1]); process.stdout.write(url.port || "3000")' "${APP_URL:-http://localhost:3000}")"
   [ -n "${DATABASE_URL:-}" ] || die "DATABASE_URL wajib diisi di .env."
   [ -n "${ADMIN_EMAIL:-}" ] || die "ADMIN_EMAIL wajib diisi di .env."
   [ -n "${ADMIN_PASSWORD:-}" ] || die "ADMIN_PASSWORD wajib diisi di .env."
+  if [ -n "${2:-}" ] && [ "${S3_SECRET_KEY:-}" = "xasset_local_secret" ]; then
+    die "Ubah S3_SECRET_KEY default di .env sebelum membuka MinIO melalui IP VPS (gunakan nilai acak yang kuat)."
+  fi
 
   log "=== XAsset development startup ==="
   echo "[1/5] Menyalakan PostgreSQL, Redis, dan MinIO..."
@@ -150,6 +155,7 @@ run_development() {
   trap 'exit 143' TERM
 
   echo "Web: ${APP_URL:-http://localhost:3000}"
+  echo "Storage API: ${S3_PUBLIC_ENDPOINT:-${S3_ENDPOINT:-http://127.0.0.1:9100}}"
   echo "Admin: $ADMIN_EMAIL"
   echo "Tekan Ctrl+C untuk berhenti."
   set +e

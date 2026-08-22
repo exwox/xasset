@@ -79,10 +79,15 @@ Tekan `Ctrl+C` untuk menghentikan web dan worker. Container dependency tetap ber
 Jika development server perlu diakses dari komputer lain, URL browser harus diberikan sebagai origin aplikasi:
 
 ```bash
+# Buat nilai acak, lalu salin hasilnya ke S3_SECRET_KEY dalam .env.
+openssl rand -hex 32
+nano .env
 ./run.sh dev http://203.0.113.10:3000
 ```
 
 Argumen URL tersebut juga mengizinkan resource dan WebSocket HMR Next.js dari hostname yang sama. Untuk VPS publik, gunakan deployment production dengan domain dan HTTPS; mode development tidak ditujukan untuk layanan internet permanen.
+
+Pada mode tersebut, runner juga membuat signed URL storage menggunakan `http://IP-VPS:9100`, memasang CORS MinIO untuk URL aplikasi, dan mempublikasikan API MinIO pada port `9100`. Izinkan TCP `3000` dan `9100` pada firewall VPS. MinIO Console pada port `9101` tetap hanya dapat diakses dari VPS.
 
 ## Deployment dari GitHub ke VPS
 
@@ -290,6 +295,8 @@ git pull --ff-only
 ```
 
 `run.sh` menjalankan seed Admin pada setiap startup. Proses ini menyamakan akun dengan `ADMIN_EMAIL` dan `ADMIN_PASSWORD` di `.env`, mengaktifkan akun, serta membersihkan lock login. Password harus berisi minimal 12 karakter. Jika port 3000 masih digunakan proses lain, runner berhenti dengan error sehingga aplikasi lama tidak tertukar dengan proses baru di port 3001.
+
+Jika upload DXF masih menghasilkan URL `127.0.0.1:9100`, proses Next.js lama masih berjalan atau runner belum menerima URL VPS. Hentikan proses tersebut lalu jalankan kembali perintah development di atas. URL upload yang benar harus menggunakan IP VPS pada port `9100`.
 
 Untuk production, ubah `ADMIN_PASSWORD` di `.env.production`, lalu jalankan kembali deployment agar password diterapkan dan lock dibersihkan:
 
